@@ -103,7 +103,8 @@ describe('처리희망일 과거 방지', () => {
   // ──────────────────────────────────────────
 
   it('오늘 날짜는 통과한다', () => {
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     expect(validateDesiredDate(today)).toBeNull();
   });
 

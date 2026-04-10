@@ -4,9 +4,9 @@
 |------|------|
 | 기능명 | 서비스데스크 (nu-ServiceDesk) |
 | 작성일 | 2026-04-09 |
-| 최종 수정 | 2026-04-11 (V2.4 문서 수치 통일 패치) |
-| 버전 | V2.4 (수치 통일: API 52개, 이벤트 15개, 전이 매트릭스 22규칙, Rate Limit 2계층, 디자인 토큰 상태명 수정) |
-| 상태 | Completed — V2.4 패치 적용 완료 (2026-04-11) |
+| 최종 수정 | 2026-04-11 (V2.5 Check 단계 동기화) |
+| 버전 | V2.5 (Check 동기화: 부서 라우트 유지 인정, 모델 목록 실제 스키마 반영, OnboardingState localStorage 인정) |
+| 상태 | Completed — V2.5 패치 적용 완료 (2026-04-11) |
 | Plan 참조 | nu-servicedesk.plan.md |
 | PRD 참조 | nu-servicedesk.prd.md |
 | 선택 아키텍처 | Option C — Pragmatic Balance |
@@ -154,7 +154,9 @@ nu-servicedesk/
 │       │   └── [id]/
 │       │       ├── route.ts
 │       │       └── deactivate/route.ts
-│       │       // departments/ 라우트 제거 [V2.3 — 부서 마스터 미제공]
+│       │       └── departments/              # [V2.5] 부서 CRUD 유지 (Project FK만 제거)
+│       │           ├── route.ts
+│       │           └── [deptId]/route.ts
 │       ├── users/
 │       │   ├── route.ts
 │       │   └── [id]/
@@ -397,11 +399,17 @@ enum AdminEditField {
 | 모델 | 목적 | 핵심 추가사항 |
 |------|------|--------------|
 | Company | 고객사 | — |
-| Project | 프로젝트 | — |
-| User | 사용자 | — |
-| Role | 역할 정의 | — |
+| Department | 부서 | [V2.5] 유지 — Project FK만 제거 |
+| Project | 프로젝트 | department 자유 텍스트 (V2.3) |
+| ProjectMember | 프로젝트 멤버 | role: main_support/support/customer |
+| User | 사용자 | UserType enum (admin/support/customer) |
 | Ticket | 티켓 | lastEscalationAt |
+| TicketSequence | 티켓 채번 | Redis INCR + DB fallback |
 | TicketStatus enum | 티켓 상태 | 9개 상태 (auto-receive 포함) |
+| TicketStatusHistory | 상태 변경 이력 | — |
+| TicketDeadlineHistory | 처리기한 변경 이력 | — |
+| TicketAssignment | 담당자 배정 | — |
+| TicketAdminEdit | 관리자 수정 이력 | AdminEditField enum |
 | CompleteRequest | 완료 승인 요청 | previousStatus, (status, createdAt) 인덱스 |
 | ExtendRequest | 연기 승인 요청 | isDeleted @default(false), unique 제약 |
 | Comment | 댓글 | 10분 수정 검증 |
@@ -409,15 +417,12 @@ enum AdminEditField {
 | Notification | 시스템 알림 | isDeleted, 복합 인덱스 |
 | NotificationType enum | 알림 타입 | 21개 타입 |
 | SatisfactionRating | 만족도 평가 | userId nullable, reminderSentAt |
-| NotificationSubscription | Web Push | — |
-| DLQJob | 배치 실패 격리 | — |
+| PushSubscription | Web Push 구독 | VAPID 기반 |
 | Holiday | 공휴일 | — |
-| BusinessHours | 근무시간 | — |
 | LoginHistory | 로그인 이력 | success, (loginId, success, createdAt) 인덱스 |
-| OnboardingState | 온보딩 진행 상태 | — |
 | SystemSetting | 시스템 설정 | Free Plan 제한값 |
-| AuditLog | 감사 로그 | Admin 수정 이력 추적 |
-| SessionToken | 세션 토큰 | 암호화 저장, 만료 관리 |
+
+> **[V2.5 변경]** 모델 목록을 실제 Prisma 스키마에 맞게 업데이트. 개념적 모델(Role→UserType enum, BusinessHours→lib/business-hours.ts 엔진, AuditLog→TicketAdminEdit+StatusHistory+DeadlineHistory, SessionToken→Redis, DLQJob→BullMQ Redis, OnboardingState→localStorage) 제거 후 실제 모델로 대체. NotificationSubscription→PushSubscription 명칭 통일.
 
 ---
 
@@ -444,7 +449,7 @@ interface ApiResponse<T> {
 |---------|-------------|---------|
 | 인증 (auth) | 4개 | POST /api/auth/login, logout, session, password |
 | 프로필 | 1개 | GET/PUT /api/profile |
-| 회사 | 4개 | /api/companies, /api/companies/[id], /api/companies/[id]/deactivate (V2.3: departments 라우트 제거) |
+| 회사 | 6개 | /api/companies, /api/companies/[id], /api/companies/[id]/deactivate, /api/companies/[id]/departments (V2.5: 부서 CRUD 유지) |
 | 사용자 | 3개 | /api/users, /api/users/[id], reset-password |
 | 프로젝트 | 3개 | /api/projects, /api/projects/[id], members |
 | 카테고리/공휴일/설정 | 5개 | /api/categories, /api/holidays, /api/settings |
