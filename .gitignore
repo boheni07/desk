@@ -1,0 +1,18 @@
+# Audit logs (may contain sensitive data)
+.bkit/audit/
+.bkit/snapshots/
+.bkit/runtime/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Node
+node_modules/
+.next/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db

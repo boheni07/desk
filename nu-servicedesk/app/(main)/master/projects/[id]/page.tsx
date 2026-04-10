@@ -1,0 +1,551 @@
+'use client';
+
+// Design Ref: §10 — 프로젝트 상세 + 멤버 관리 페이지
+// Plan SC: FR-06, FR-07 프로젝트 + 멤버 관리
+
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Container from 'react-bootstrap/Container';
+import Button from 'react-bootstrap/Button';
+import Form from 'react-bootstrap/Form';
+import Spinner from 'react-bootstrap/Spinner';
+import Alert from 'react-bootstrap/Alert';
+import Row from 'react-bootstrap/Row';
+import Col from 'react-bootstrap/Col';
+import { BsArrowLeft, BsSave, BsKanban, BsPeopleFill } from 'react-icons/bs';
+
+interface ProjectDetail {
+  id: string;
+  name: string;
+  code: string;
+  description: string | null;
+  department: string | null;
+  startDate: string;
+  endDate: string | null;
+  isActive: boolean;
+  companyId: string;
+  company: { id: string; name: string };
+  members: ProjectMember[];
+  _count: { tickets: number };
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ProjectMember {
+  id: string;
+  role: string;
+  userId: string;
+  user: { id: string; name: string; type: string };
+}
+
+interface UserItem {
+  id: string;
+  name: string;
+  loginId: string;
+}
+
+const ROLE_META: Record<string, { label: string; color: string }> = {
+  main_support: { label: 'Main 담당자', color: '#7C3AED' },
+  support:      { label: '지원담당자',  color: 'var(--brand-primary)' },
+  customer:     { label: '고객담당자',  color: '#2F9E44' },
+};
+
+export default function ProjectDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const [project, setProject] = useState<ProjectDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+  const [userType, setUserType] = useState('');
+
+  const [formData, setFormData] = useState({
+    name: '', startDate: '', endDate: '', description: '', isActive: true, department: '',
+  });
+  const [formErrors, setFormErrors] = useState<Record<string, string[]>>({});
+
+  const [customerUsers, setCustomerUsers] = useState<UserItem[]>([]);
+  const [supportUsers, setSupportUsers] = useState<UserItem[]>([]);
+  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
+  const [selectedSupports, setSelectedSupports] = useState<string[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [loadingSupports, setLoadingSupports] = useState(false);
+
+  const fetchSession = useCallback(async () => {
+    try {
+      const res = await fetch('/api/auth/session');
+      const json = await res.json();
+      if (json.success) setUserType(json.data.type);
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchProject = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/projects/${id}`);
+      const json = await res.json();
+      if (json.success) {
+        setProject(json.data);
+        setFormData({
+          name: json.data.name,
+          startDate: json.data.startDate.split('T')[0],
+          endDate: json.data.endDate ? json.data.endDate.split('T')[0] : '',
+          description: json.data.description || '',
+          isActive: json.data.isActive,
+          department: json.data.department || '',
+        });
+      } else {
+        setError(json.error?.message || '데이터를 불러올 수 없습니다.');
+      }
+    } catch {
+      setError('서버에 연결할 수 없습니다.');
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  const fetchSupportUsers = useCallback(async () => {
+    setLoadingSupports(true);
+    try {
+      const res = await fetch('/api/users?role=support&isActive=true&limit=100');
+      const json = await res.json();
+      if (json.success) {
+        setSupportUsers(json.data.users.map((u: UserItem) => ({ id: u.id, name: u.name, loginId: u.loginId })));
+      }
+    } catch {
+      setSupportUsers([]);
+    } finally {
+      setLoadingSupports(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchSession(); fetchSupportUsers(); }, [fetchSession, fetchSupportUsers]);
+  useEffect(() => { fetchProject(); }, [fetchProject]);
+
+  useEffect(() => {
+    if (!project) return;
+    setLoadingCustomers(true);
+    fetch(`/api/users?role=customer&companyId=${project.companyId}&isActive=true&limit=100`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) {
+          setCustomerUsers(json.data.users.map((u: UserItem) => ({ id: u.id, name: u.name, loginId: u.loginId })));
+        }
+      })
+      .catch(() => setCustomerUsers([]))
+      .finally(() => setLoadingCustomers(false));
+
+    const mainSupports = project.members.filter((m) => m.role === 'main_support').map((m) => m.userId);
+    const supports = project.members.filter((m) => m.role === 'support').map((m) => m.userId);
+    setSelectedSupports([...mainSupports, ...supports]);
+    setSelectedCustomers(project.members.filter((m) => m.role === 'customer').map((m) => m.userId));
+  }, [project?.id]);
+
+  const toggleCustomer = (userId: string) => {
+    setSelectedCustomers((prev) =>
+      prev.includes(userId) ? prev.filter((i) => i !== userId) : [...prev, userId],
+    );
+  };
+
+  const toggleSupport = (userId: string) => {
+    setSelectedSupports((prev) => {
+      if (prev.includes(userId)) return prev.filter((i) => i !== userId);
+      return [...prev, userId];
+    });
+  };
+
+  const handleSave = async () => {
+    setFormErrors({});
+    setSaveMsg('');
+    if (formData.endDate && formData.endDate < formData.startDate) {
+      setFormErrors({ endDate: ['종료일은 시작일보다 같거나 이후여야 합니다.'] });
+      return;
+    }
+    if (selectedSupports.length === 0) {
+      setFormErrors({ _general: ['지원담당자를 1명 이상 선택해 주세요.'] });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/projects/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          startDate: formData.startDate,
+          endDate: formData.endDate || null,
+          description: formData.description || null,
+          isActive: formData.isActive,
+          departmentName: formData.department || null,
+          customerIds: selectedCustomers,
+          supportIds: selectedSupports,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setSaveMsg('저장되었습니다.');
+        fetchProject();
+      } else {
+        if (json.error?.fieldErrors) {
+          setFormErrors(json.error.fieldErrors);
+        } else {
+          setFormErrors({ _general: [json.error?.message || '저장에 실패했습니다.'] });
+        }
+      }
+    } catch {
+      setFormErrors({ _general: ['서버에 연결할 수 없습니다.'] });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('ko-KR');
+
+  if (loading) {
+    return (
+      <Container fluid className="text-center py-5">
+        <Spinner animation="border" variant="primary" style={{ width: '1.5rem', height: '1.5rem' }} />
+        <div className="mt-2 text-muted small">불러오는 중...</div>
+      </Container>
+    );
+  }
+
+  if (error || !project) {
+    return (
+      <Container fluid>
+        <Alert variant="danger" className="mt-3">{error || '프로젝트를 찾을 수 없습니다.'}</Alert>
+        <Button variant="outline-secondary" size="sm" onClick={() => router.push('/master/projects')}>
+          <BsArrowLeft size={14} className="me-1" /> 목록으로
+        </Button>
+      </Container>
+    );
+  }
+
+  const isAdmin = userType === 'admin';
+
+  return (
+    <Container fluid>
+      {/* Page Header */}
+      <div className="page-header">
+        <div className="d-flex align-items-center gap-2 flex-wrap">
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            className="btn-icon"
+            onClick={() => router.push('/master/projects')}
+            title="목록으로"
+          >
+            <BsArrowLeft size={14} />
+          </Button>
+          <BsKanban style={{ color: 'var(--brand-primary)', fontSize: '1.1rem', flexShrink: 0 }} />
+          <div>
+            <h1 className="page-header-title mb-0" style={{ fontSize: '1.125rem' }}>
+              {project.name}
+            </h1>
+            <span className="ticket-number" style={{ fontSize: '0.75rem' }}>{project.code}</span>
+          </div>
+          <span
+            className={`badge ${project.isActive ? 'bg-success' : 'bg-secondary'} bg-opacity-10 border`}
+            style={{ color: project.isActive ? 'var(--bs-success)' : 'var(--text-muted)', fontSize: '0.72rem', fontWeight: 600 }}
+          >
+            {project.isActive ? '● 활성' : '○ 비활성'}
+          </span>
+        </div>
+        {isAdmin && (
+          <div className="page-header-actions">
+            <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
+              {saving ? <Spinner size="sm" animation="border" /> : <><BsSave size={13} className="me-1" />저장</>}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Info Grid */}
+      <div className="info-grid">
+        <div>
+          <div className="info-item-label">고객사</div>
+          <div className="info-item-value">{project.company.name}</div>
+        </div>
+        <div>
+          <div className="info-item-label">프로젝트 코드</div>
+          <div className="info-item-value">
+            <span className="ticket-number" style={{ fontSize: '0.8125rem' }}>{project.code}</span>
+          </div>
+        </div>
+        <div>
+          <div className="info-item-label">기간</div>
+          <div className="info-item-value">
+            {formatDate(project.startDate)} ~ {project.endDate ? formatDate(project.endDate) : '진행중'}
+          </div>
+        </div>
+        <div>
+          <div className="info-item-label">티켓</div>
+          <div className="info-item-value">{project._count.tickets}건</div>
+        </div>
+        <div>
+          <div className="info-item-label">멤버</div>
+          <div className="info-item-value">{project.members.length}명</div>
+        </div>
+        <div>
+          <div className="info-item-label">등록일</div>
+          <div className="info-item-value">{new Date(project.createdAt).toLocaleDateString('ko-KR')}</div>
+        </div>
+      </div>
+
+      {isAdmin ? (
+        /* ── 관리자: 수정 폼 ── */
+        <>
+          {/* 기본 정보 섹션 */}
+          <div className="detail-section">
+            <div className="detail-section-header">
+              <span className="detail-section-title">기본 정보</span>
+            </div>
+            <div className="detail-section-body">
+              {formErrors._general && <Alert variant="danger" className="mb-3">{formErrors._general.join(', ')}</Alert>}
+              {saveMsg && <Alert variant="success" className="mb-3" dismissible onClose={() => setSaveMsg('')}>{saveMsg}</Alert>}
+              <Form>
+                <Row>
+                  <Col md={8}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>프로젝트명 <span className="text-danger">*</span></Form.Label>
+                      <Form.Control
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        isInvalid={!!formErrors.name}
+                      />
+                      <Form.Control.Feedback type="invalid">{formErrors.name?.join(', ')}</Form.Control.Feedback>
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>상태</Form.Label>
+                      <Form.Select
+                        value={String(formData.isActive)}
+                        onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'true' })}
+                      >
+                        <option value="true">활성</option>
+                        <option value="false">비활성</option>
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                </Row>
+                <Row>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>부서</Form.Label>
+                      <Form.Control
+                        value={formData.department}
+                        onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                        placeholder="부서명 입력"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>시작일 <span className="text-danger">*</span></Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={formData.startDate}
+                        onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>종료일</Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={formData.endDate}
+                        min={formData.startDate}
+                        onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                        isInvalid={!!formErrors.endDate}
+                      />
+                      <Form.Control.Feedback type="invalid">{formErrors.endDate?.join(', ')}</Form.Control.Feedback>
+                    </Form.Group>
+                  </Col>
+                </Row>
+                <Form.Group className="mb-0">
+                  <Form.Label>설명</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="프로젝트 설명 (선택)"
+                  />
+                </Form.Group>
+              </Form>
+            </div>
+          </div>
+
+          {/* 멤버 관리 섹션 */}
+          <div className="detail-section">
+            <div className="detail-section-header">
+              <span className="detail-section-title">
+                <BsPeopleFill size={14} className="me-1" style={{ color: 'var(--brand-primary)' }} />
+                멤버 관리
+              </span>
+            </div>
+            <div className="detail-section-body">
+              {/* 고객담당자 */}
+              <Form.Group className="mb-4">
+                <Form.Label className="fw-semibold d-flex align-items-center gap-2" style={{ fontSize: '0.875rem' }}>
+                  고객담당자
+                  {selectedCustomers.length > 0 && (
+                    <span className="badge" style={{ background: 'rgba(59,91,219,0.1)', color: 'var(--brand-primary)', fontSize: '0.72rem', fontWeight: 600 }}>
+                      {selectedCustomers.length}명 선택
+                    </span>
+                  )}
+                </Form.Label>
+                {loadingCustomers ? (
+                  <div className="text-muted small py-1"><Spinner size="sm" animation="border" className="me-1" />불러오는 중...</div>
+                ) : customerUsers.length === 0 ? (
+                  <div className="text-muted small py-1">해당 고객사에 등록된 고객담당자가 없습니다.</div>
+                ) : (
+                  <div className="member-toggle">
+                    {customerUsers.map((u) => {
+                      const selected = selectedCustomers.includes(u.id);
+                      return (
+                        <button
+                          key={u.id}
+                          type="button"
+                          className={`member-toggle-btn${selected ? ' selected' : ''}`}
+                          onClick={() => toggleCustomer(u.id)}
+                        >
+                          {u.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <Form.Text className="text-muted">여러 명 선택 가능합니다.</Form.Text>
+              </Form.Group>
+
+              {/* 지원담당자 */}
+              <Form.Group className="mb-2">
+                <Form.Label className="fw-semibold d-flex align-items-center gap-2" style={{ fontSize: '0.875rem' }}>
+                  지원담당자 <span className="text-danger">*</span>
+                  {selectedSupports.length > 0 && (
+                    <span className="badge" style={{ background: 'rgba(124,58,237,0.1)', color: '#7C3AED', fontSize: '0.72rem', fontWeight: 600 }}>
+                      {selectedSupports.length}명 선택
+                    </span>
+                  )}
+                </Form.Label>
+                {loadingSupports ? (
+                  <div className="text-muted small py-1"><Spinner size="sm" animation="border" className="me-1" />불러오는 중...</div>
+                ) : supportUsers.length === 0 ? (
+                  <div className="text-muted small py-1">등록된 지원담당자가 없습니다.</div>
+                ) : (
+                  <div className="member-toggle">
+                    {supportUsers.map((u) => {
+                      const selected = selectedSupports.includes(u.id);
+                      const isMain = selectedSupports[0] === u.id;
+                      return (
+                        <button
+                          key={u.id}
+                          type="button"
+                          className={`member-toggle-btn${selected ? (isMain ? ' main-selected' : ' selected') : ''}`}
+                          onClick={() => toggleSupport(u.id)}
+                        >
+                          {u.name}
+                          {isMain && <span style={{ fontSize: '0.65rem', opacity: 0.85, marginLeft: 3 }}>Main</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <Form.Text className="text-muted">처음 선택한 담당자가 Main 담당자로 지정됩니다.</Form.Text>
+              </Form.Group>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* ── 읽기 전용 뷰 ── */
+        <>
+          {/* 상세 정보 */}
+          {(project.department || project.description) && (
+            <div className="detail-section">
+              <div className="detail-section-header">
+                <span className="detail-section-title">상세 정보</span>
+              </div>
+              <div className="detail-section-body">
+                <div className="info-grid" style={{ marginBottom: 0 }}>
+                  {project.department && (
+                    <div>
+                      <div className="info-item-label">부서</div>
+                      <div className="info-item-value">{project.department}</div>
+                    </div>
+                  )}
+                  {project.description && (
+                    <div style={{ gridColumn: project.department ? 'auto' : '1 / -1' }}>
+                      <div className="info-item-label">설명</div>
+                      <div className="info-item-value">{project.description}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 멤버 현황 */}
+          <div className="detail-section">
+            <div className="detail-section-header">
+              <span className="detail-section-title">
+                <BsPeopleFill size={14} className="me-1" style={{ color: 'var(--brand-primary)' }} />
+                프로젝트 멤버
+              </span>
+              <span className="badge bg-light text-secondary border">{project.members.length}명</span>
+            </div>
+            <div className="detail-section-body">
+              {project.members.length === 0 ? (
+                <div className="text-muted small">배정된 멤버가 없습니다.</div>
+              ) : (
+                <div className="d-flex flex-column gap-3">
+                  {(['main_support', 'support', 'customer'] as const).map((role) => {
+                    const roleMembers = project.members.filter((m) => m.role === role);
+                    if (roleMembers.length === 0) return null;
+                    const meta = ROLE_META[role];
+                    return (
+                      <div key={role}>
+                        <div
+                          className="mb-2"
+                          style={{
+                            fontSize: '0.75rem', fontWeight: 600,
+                            color: meta.color,
+                            textTransform: 'uppercase', letterSpacing: '0.05em',
+                          }}
+                        >
+                          {meta.label}
+                        </div>
+                        <div className="d-flex flex-wrap gap-2">
+                          {roleMembers.map((m) => (
+                            <span
+                              key={m.id}
+                              style={{
+                                padding: '0.3rem 0.75rem',
+                                fontSize: '0.8125rem',
+                                fontWeight: 500,
+                                borderRadius: '50rem',
+                                border: `1.5px solid ${meta.color}33`,
+                                background: `${meta.color}0D`,
+                                color: meta.color,
+                              }}
+                            >
+                              {m.user.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </Container>
+  );
+}

@@ -1,0 +1,32 @@
+// 티켓 상태 배지 커스텀 스타일 (Bootstrap 기본 팔레트 미지원 색상)
+// Design V2.1 — 9개 상태 + DELAYED pulse 애니메이션
+
+.badge-status {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.3em 0.65em;
+  border-radius: 50rem;
+  border: 1px solid;
+}
+
+.badge-registered     { color: var(--status-registered-color); background: var(--status-registered-bg); border-color: var(--status-registered-border); }
+.badge-received       { color: var(--status-received-color); background: var(--status-received-bg); border-color: var(--status-received-border); }
+.badge-inprogress     { color: var(--status-inprogress-color); background: var(--status-inprogress-bg); border-color: var(--status-inprogress-border); }
+.badge-delayed        { color: var(--status-delayed-color); background: var(--status-delayed-bg); border-color: var(--status-delayed-border); animation: pulse-badge 1.5s ease-in-out infinite; }
+.badge-extend         { color: var(--status-extend-color); background: var(--status-extend-bg); border-color: var(--status-extend-border); }
+.badge-complete-req   { color: var(--status-complete-req-color); background: var(--status-complete-req-bg); border-color: var(--status-complete-req-border); }
+.badge-satisfaction   { color: var(--status-satisfaction-color); background: var(--status-satisfaction-bg); border-color: var(--status-satisfaction-border); }
+.badge-closed         { color: var(--status-closed-color); background: var(--status-closed-bg); border-color: var(--status-closed-border); }
+.badge-cancelled      { color: var(--status-cancelled-color); background: var(--status-cancelled-bg); border-color: var(--status-cancelled-border); text-decoration: line-through; }
+
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+// 우선순위 배지
+.badge-priority { font-size: 0.7rem; font-weight: 600; padding: 0.25em 0.5em; border-radius: 0.25rem; }
+.badge-urgent { color: var(--priority-urgent-color); background: var(--priority-urgent-bg); }
+.badge-high   { color: var(--priority-high-color); background: var(--priority-high-bg); }
+.badge-normal { color: var(--priority-normal-color); background: var(--priority-normal-bg); }
+.badge-low    { color: var(--priority-low-color); background: var(--priority-low-bg); }

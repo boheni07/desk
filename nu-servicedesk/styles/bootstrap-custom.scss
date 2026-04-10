@@ -1,0 +1,9 @@
+// nu-ServiceDesk Bootstrap 5 진입점
+// 1. 변수 오버라이드 (bootstrap import 전에 선언)
+@import 'variables';
+
+// 2. Bootstrap 전체 import
+@import 'bootstrap/scss/bootstrap';
+
+// 3. 커스텀 상태/우선순위 색상
+@import 'status-colors';

@@ -1,0 +1,4 @@
+- [nu-servicedesk Phase 2](project_nusd_phase2.md) — Auth/BizHours/Middleware implementation status (2026-04-10)
+- [nu-servicedesk Phase 3](project_nusd_phase3.md) — Master/Project CRUD APIs + Pages (2026-04-10)
+- [nu-servicedesk Module 6+7](project_nusd_module6_7.md) — BullMQ 10 batch jobs + Ticket Workflow extend/complete (2026-04-10)
+- [nu-servicedesk Module 8+9](project_nusd_module8_9.md) — Comments, Attachments (R2), Advanced Filters, Detail Enhancements (2026-04-10)

@@ -1,0 +1,577 @@
+// Design Ref: §3 — Database Schema (V2.1, 22+ 모델)
+// Plan SC: SC-08 RBAC 완전 적용, SC-10 채번 정확도
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// === onDelete 전략 ===
+// Restrict: 참조 데이터 존재 시 삭제 차단
+// SetNull: 참조 대상 삭제 시 null 설정
+// Cascade: 부모 삭제 시 자식 함께 삭제
+// 비활성화는 소프트 딜리트(isActive=false), hard delete 원칙적 차단
+
+// ============================================================
+// 1. users — 통합 사용자 테이블 (FR-03)
+// ============================================================
+model User {
+  id                  String    @id @default(cuid())
+  loginId             String    @unique @map("login_id")
+  password            String                                // bcrypt 해시
+  name                String
+  email               String?   @unique                    // 선택 (V1.1)
+  phone               String?                              // 선택 (V1.1)
+  type                UserType                               // admin / support / customer
+  isActive            Boolean   @default(true) @map("is_active")
+  mustChangePassword  Boolean   @default(true) @map("must_change_password")
+  loginAttempts       Int       @default(0) @map("login_attempts")
+  lockedUntil         DateTime? @map("locked_until")
+  companyId           String?   @map("company_id")           // customer만 필수
+  departmentId        String?   @map("department_id")        // customer 선택
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  company             Company?            @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  department          Department?         @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  projectMembers      ProjectMember[]
+  ticketsRegistered   Ticket[]            @relation("RegisteredBy")
+  ticketsCustomer     Ticket[]            @relation("CustomerUser")
+  ticketAssignments   TicketAssignment[]
+  comments            Comment[]
+  notifications       Notification[]
+  pushSubscriptions   PushSubscription[]
+  statusHistoryActor  TicketStatusHistory[]  @relation("ActorUser")
+  deadlineHistoryActor TicketDeadlineHistory[] @relation("DeadlineHistoryActor")
+  adminEdits          TicketAdminEdit[]
+  extendRequests      ExtendRequest[]        @relation("ExtendRequester")
+  extendApprovals     ExtendRequest[]        @relation("ExtendApprover")
+  completeRequests    CompleteRequest[]      @relation("CompleteRequester")
+  completeApprovals   CompleteRequest[]      @relation("CompleteApprover")
+  satisfactionRatings SatisfactionRating[]
+  uploadedAttachments Attachment[]           @relation("AttachmentUploader")
+  loginHistory        LoginHistory[]
+
+  @@map("users")
+}
+
+enum UserType {
+  admin
+  support
+  customer
+}
+
+// ============================================================
+// 2. companies — 고객사 (FR-02)
+// ============================================================
+model Company {
+  id                String    @id @default(cuid())
+  name              String
+  businessNumber    String?   @unique @map("business_number")
+  address           String?
+  phone             String?
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  departments       Department[]
+  users             User[]
+  projects          Project[]
+
+  @@map("companies")
+}
+
+// ============================================================
+// 3. departments — 부서 (FR-02)
+// ============================================================
+model Department {
+  id          String    @id @default(cuid())
+  companyId   String    @map("company_id")
+  name        String
+  code        String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  users       User[]
+
+  @@unique([companyId, name])
+  @@map("departments")
+}
+
+// ============================================================
+// 4. projects — 프로젝트 (FR-06)
+// ============================================================
+model Project {
+  id            String    @id @default(cuid())
+  name          String
+  code          String    @unique
+  description   String?
+  department    String?                              // 자유 텍스트 — FK 없음
+  startDate     DateTime  @map("start_date")
+  endDate       DateTime? @map("end_date")
+  isActive      Boolean   @default(true) @map("is_active")
+  companyId     String    @map("company_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  company       Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  members       ProjectMember[]
+  tickets       Ticket[]
+
+  @@map("projects")
+}
+
+// ============================================================
+// 5. project_members — 프로젝트 멤버 (FR-07)
+// ============================================================
+model ProjectMember {
+  id          String            @id @default(cuid())
+  projectId   String            @map("project_id")
+  userId      String            @map("user_id")
+  role        ProjectMemberRole
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+enum ProjectMemberRole {
+  main_support
+  support
+  customer
+}
+
+// ============================================================
+// 6. categories — 카테고리 (FR-05)
+// ============================================================
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  isActive    Boolean   @default(true) @map("is_active")
+  sortOrder   Int       @default(0) @map("sort_order")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tickets     Ticket[]
+
+  @@map("categories")
+}
+
+// ============================================================
+// 7. holidays — 공휴일 (FR-04)
+// ============================================================
+model Holiday {
+  id          String    @id @default(cuid())
+  date        DateTime  @db.Date
+  name        String
+  year        Int
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([date])
+  @@index([year])
+  @@map("holidays")
+}
+
+// ============================================================
+// 8. system_settings — 시스템 설정 (key-value)
+// ============================================================
+model SystemSetting {
+  id          String    @id @default(cuid())
+  key         String    @unique
+  value       String    // JSON string
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+// ============================================================
+// 9. ticket_sequences — 연도별 채번 카운터 (FR-09)
+// ============================================================
+model TicketSequence {
+  year        Int       @id
+  lastNumber  Int       @default(0) @map("last_number")
+
+  @@map("ticket_sequences")
+}
+
+// ============================================================
+// 10. tickets — 티켓 (FR-10)
+// ============================================================
+model Ticket {
+  id                      String        @id @default(cuid())
+  ticketNumber            String        @unique @map("ticket_number")  // TK-YYYY-00000
+  projectId               String        @map("project_id")
+  title                   String
+  content                 String        @db.Text
+  categoryId              String        @map("category_id")
+  priority                TicketPriority
+  status                  TicketStatus  @default(REGISTERED)
+  registrationMethod      RegistrationMethod @default(DIRECT) @map("registration_method")
+
+  desiredDate             DateTime      @map("desired_date")
+  expectedCompletionDate  DateTime?     @map("expected_completion_date")
+  deadline                DateTime?
+  receivedAt              DateTime?     @map("received_at")
+
+  urgencyReason           String?       @map("urgency_reason")
+  completeRequestCount    Int           @default(0) @map("complete_request_count")
+  lastEscalationAt        DateTime?     @map("last_escalation_at")  // V2.1: 에스컬레이션 중복 방지
+
+  registeredById          String        @map("registered_by_id")
+  customerUserId          String?       @map("customer_user_id")
+
+  createdAt               DateTime      @default(now()) @map("created_at")
+  updatedAt               DateTime      @updatedAt @map("updated_at")
+
+  project                 Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  category                Category             @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  registeredBy            User                 @relation("RegisteredBy", fields: [registeredById], references: [id], onDelete: Restrict)
+  customerUser            User?                @relation("CustomerUser", fields: [customerUserId], references: [id], onDelete: SetNull)
+  statusHistory           TicketStatusHistory[]
+  deadlineHistory         TicketDeadlineHistory[]
+  adminEdits              TicketAdminEdit[]
+  assignments             TicketAssignment[]
+  extendRequests          ExtendRequest[]
+  completeRequests        CompleteRequest[]
+  satisfactionRating      SatisfactionRating?
+  comments                Comment[]
+  attachments             Attachment[]
+  notifications           Notification[]
+
+  @@index([status, deadline])
+  @@index([projectId, status])
+  @@index([registeredById, status], map: "idx_tickets_registered_by_status")
+  @@index([createdAt])
+  @@map("tickets")
+}
+
+enum TicketStatus {
+  REGISTERED
+  RECEIVED
+  IN_PROGRESS
+  DELAYED
+  EXTEND_REQUESTED
+  COMPLETE_REQUESTED
+  SATISFACTION_PENDING
+  CLOSED
+  CANCELLED
+}
+
+enum TicketPriority {
+  URGENT
+  HIGH
+  NORMAL
+  LOW
+}
+
+enum RegistrationMethod {
+  DIRECT
+  PHONE
+  EMAIL
+  OTHER
+}
+
+// ============================================================
+// 11. ticket_status_history — 상태 변경 이력 (FR-20)
+// ============================================================
+model TicketStatusHistory {
+  id              String        @id @default(cuid())
+  ticketId        String        @map("ticket_id")
+  previousStatus  TicketStatus  @map("previous_status")
+  newStatus       TicketStatus  @map("new_status")
+  actorId         String?       @map("actor_id")
+  actorType       String        @default("USER") @map("actor_type") // USER | SYSTEM
+  reason          String?
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  ticket          Ticket   @relation(fields: [ticketId], references: [id])
+  actor           User?    @relation("ActorUser", fields: [actorId], references: [id])
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_status_history")
+}
+
+// ============================================================
+// 12. ticket_deadline_history — 처리기한 변경 이력 (FR-20)
+// ============================================================
+model TicketDeadlineHistory {
+  id              String    @id @default(cuid())
+  ticketId        String    @map("ticket_id")
+  previousDeadline DateTime? @map("previous_deadline")
+  newDeadline     DateTime  @map("new_deadline")
+  reason          String
+  actorId         String?   @map("actor_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  ticket          Ticket   @relation(fields: [ticketId], references: [id])
+  actor           User?    @relation("DeadlineHistoryActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_deadline_history")
+}
+
+// ============================================================
+// 13. ticket_admin_edits — 관리자 수정 이력 (FR-20)
+// ============================================================
+model TicketAdminEdit {
+  id              String         @id @default(cuid())
+  ticketId        String         @map("ticket_id")
+  adminId         String         @map("admin_id")
+  fieldName       AdminEditField @map("field_name")  // V2.1: enum
+  previousValue   String?        @map("previous_value") @db.Text
+  newValue        String?        @map("new_value") @db.Text
+  reason          String?
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  ticket          Ticket   @relation(fields: [ticketId], references: [id])
+  admin           User     @relation(fields: [adminId], references: [id])
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_admin_edits")
+}
+
+enum AdminEditField {
+  TITLE
+  CONTENT
+  CATEGORY
+  PRIORITY
+  ASSIGNEE
+  STATUS
+  DEADLINE
+}
+
+// ============================================================
+// 14. ticket_assignments — 추가 지원담당자 배정 (FR-12)
+// ============================================================
+model TicketAssignment {
+  id          String    @id @default(cuid())
+  ticketId    String    @map("ticket_id")
+  userId      String    @map("user_id")
+  assignedAt  DateTime  @default(now()) @map("assigned_at")
+
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([ticketId, userId])
+  @@map("ticket_assignments")
+}
+
+// ============================================================
+// 15. extend_requests — 연기요청 (FR-17)
+// ============================================================
+model ExtendRequest {
+  id              String              @id @default(cuid())
+  ticketId        String              @map("ticket_id")
+  requesterId     String              @map("requester_id")
+  newDeadline     DateTime            @map("new_deadline")
+  reason          String
+  status          ApprovalStatus      @default(PENDING)
+  approverId      String?             @map("approver_id")
+  rejectReason    String?             @map("reject_reason")
+  autoApproved    Boolean             @default(false) @map("auto_approved")
+  approvedAt      DateTime?           @map("approved_at")
+  isDeleted       Boolean             @default(false) @map("is_deleted")  // V2.1: soft-delete
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  ticket          Ticket   @relation(fields: [ticketId], references: [id])
+  requester       User     @relation("ExtendRequester", fields: [requesterId], references: [id])
+  approver        User?    @relation("ExtendApprover", fields: [approverId], references: [id])
+
+  @@index([ticketId])
+  @@index([status, createdAt])
+  @@unique([ticketId])  // 앱 레벨에서 isDeleted=false 체크
+  @@map("extend_requests")
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ============================================================
+// 16. complete_requests — 완료요청 (FR-18)
+// ============================================================
+model CompleteRequest {
+  id              String              @id @default(cuid())
+  ticketId        String              @map("ticket_id")
+  requesterId     String              @map("requester_id")
+  attemptNumber   Int                 @map("attempt_number")
+  content         String              @db.Text
+  status          ApprovalStatus      @default(PENDING)
+  previousStatus  TicketStatus        @map("previous_status")  // V2.1: 반려 시 복귀 상태
+  approverId      String?             @map("approver_id")
+  rejectReason    String?             @map("reject_reason")
+  autoApproved    Boolean             @default(false) @map("auto_approved")
+  approvedAt      DateTime?           @map("approved_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  ticket          Ticket   @relation(fields: [ticketId], references: [id])
+  requester       User     @relation("CompleteRequester", fields: [requesterId], references: [id])
+  approver        User?    @relation("CompleteApprover", fields: [approverId], references: [id])
+
+  @@index([ticketId, attemptNumber])
+  @@index([status, createdAt])  // V2.1: 자동승인 배치 최적화
+  @@map("complete_requests")
+}
+
+// ============================================================
+// 17. satisfaction_ratings — 만족도 평가 (FR-19)
+// ============================================================
+model SatisfactionRating {
+  id              String    @id @default(cuid())
+  ticketId        String    @unique @map("ticket_id")
+  userId          String?   @map("user_id")           // V2.1: nullable (자동종료 시 null)
+  rating          Int?                                  // null=자동종료, 1~5=실제 평가
+  comment         String?   @db.Text
+  autoCompleted   Boolean   @default(false) @map("auto_completed")
+  reminderSentAt  DateTime? @map("reminder_sent_at")   // V2.1: 리마인더 중복 방지
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  ticket      Ticket   @relation(fields: [ticketId], references: [id])
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@map("satisfaction_ratings")
+}
+
+// ============================================================
+// 18. comments — 댓글 및 내부 메모 (FR-21)
+// ============================================================
+model Comment {
+  id          String        @id @default(cuid())
+  ticketId    String        @map("ticket_id")
+  authorId    String        @map("author_id")
+  type        CommentType
+  content     String        @db.Text
+  isEdited    Boolean       @default(false) @map("is_edited")
+  isDeleted   Boolean       @default(false) @map("is_deleted")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  ticket      Ticket       @relation(fields: [ticketId], references: [id])
+  author      User         @relation(fields: [authorId], references: [id])
+  attachments Attachment[]
+
+  @@index([ticketId, createdAt])
+  @@map("comments")
+}
+
+enum CommentType {
+  PUBLIC
+  INTERNAL
+}
+
+// ============================================================
+// 19. attachments — 파일 첨부 (FR-10, FR-21)
+// ============================================================
+model Attachment {
+  id          String    @id @default(cuid())
+  ticketId    String?   @map("ticket_id")
+  commentId   String?   @map("comment_id")
+  uploaderId  String?   @map("uploader_id")
+  fileName    String    @map("file_name")
+  fileSize    Int       @map("file_size")
+  mimeType    String    @map("mime_type")
+  r2Key       String    @map("r2_key")
+  uploadedAt  DateTime  @default(now()) @map("uploaded_at")
+
+  ticket      Ticket?  @relation(fields: [ticketId], references: [id])
+  comment     Comment? @relation(fields: [commentId], references: [id])
+  uploader    User?    @relation("AttachmentUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId])
+  @@index([commentId])
+  @@map("attachments")
+}
+
+// ============================================================
+// 20. notifications — 알림 (FR-23, V2.1: 21개 타입)
+// ============================================================
+model Notification {
+  id          String              @id @default(cuid())
+  userId      String              @map("user_id")
+  ticketId    String?             @map("ticket_id")
+  type        NotificationType
+  title       String
+  body        String
+  linkUrl     String?             @map("link_url")
+  isRead      Boolean             @default(false) @map("is_read")
+  isDeleted   Boolean             @default(false) @map("is_deleted")
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  user        User     @relation(fields: [userId], references: [id])
+  ticket      Ticket?  @relation(fields: [ticketId], references: [id])
+
+  @@index([userId, isDeleted, isRead, createdAt])  // V2.1: isDeleted 포함
+  @@map("notifications")
+}
+
+enum NotificationType {
+  TICKET_CREATED
+  TICKET_RECEIVED
+  EXTEND_REQUESTED
+  EXTEND_AUTO_APPROVE_SOON   // V2.1
+  EXTEND_APPROVED
+  EXTEND_REJECTED
+  EXTEND_AUTO_APPROVED       // V2.1
+  COMPLETE_REQUESTED
+  COMPLETE_APPROVED
+  COMPLETE_REJECTED
+  COMPLETE_2ND_REJECTED
+  COMPLETE_AUTO_APPROVED
+  COMMENT_CREATED
+  IN_PROGRESS_TRANSITION
+  SATISFACTION_REMINDER
+  DELAYED_TRANSITION
+  STALE_ESCALATION
+  PROJECT_DEACTIVATED
+  CUSTOMER_ZERO_WARNING
+  PROXY_APPROVAL_COMPLETED
+  BATCH_JOB_FAILED           // V2.1
+}
+
+// ============================================================
+// 21. push_subscriptions — Push 구독 (FR-23)
+// ============================================================
+model PushSubscription {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  endpoint    String    @unique
+  p256dh      String
+  auth        String
+  lastUsedAt  DateTime  @default(now()) @map("last_used_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+// ============================================================
+// 22. login_history — 로그인 이력 (개인정보보호법, V1.1+)
+// ============================================================
+model LoginHistory {
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  loginId    String   @map("login_id")
+  success    Boolean
+  ipAddress  String   @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  failReason String?  @map("fail_reason")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([loginId, success, createdAt])  // V2.1: 실패 분석 최적화
+  @@map("login_history")
+}

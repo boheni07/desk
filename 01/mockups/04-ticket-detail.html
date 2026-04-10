@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>티켓 상세 - TK-2026-00038 - nu-ServiceDesk</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="common.css" rel="stylesheet">
+</head>
+<body>
+
+  <!-- 사이드바 -->
+  <nav class="sidebar d-none d-md-flex flex-column py-3">
+    <div class="px-3 mb-4">
+      <span style="font-size:1.1rem;font-weight:800;color:var(--bs-primary)"><i class="bi bi-headset me-1"></i>nu-ServiceDesk</span>
+    </div>
+    <ul class="nav flex-column">
+      <li class="nav-item"><a class="nav-link" href="02-dashboard-admin.html"><span class="nav-icon"><i class="bi bi-grid-1x2"></i></span> 대시보드</a></li>
+      <li class="nav-item"><a class="nav-link active" href="03-ticket-list.html"><span class="nav-icon"><i class="bi bi-ticket-detailed"></i></span> 티켓</a></li>
+    </ul>
+  </nav>
+
+  <!-- 헤더 -->
+  <header class="top-header">
+    <button class="btn btn-link text-dark d-md-none me-2 p-0" data-bs-toggle="offcanvas" data-bs-target="#mobileSidebar">
+      <i class="bi bi-list" style="font-size:1.5rem"></i>
+    </button>
+    <nav aria-label="breadcrumb" class="me-auto">
+      <ol class="breadcrumb mb-0">
+        <li class="breadcrumb-item"><a href="03-ticket-list.html" class="text-decoration-none">티켓</a></li>
+        <li class="breadcrumb-item active">TK-2026-00038</li>
+      </ol>
+    </nav>
+    <div class="dropdown me-3">
+      <button class="btn btn-link text-dark position-relative p-0" data-bs-toggle="dropdown">
+        <i class="bi bi-bell" style="font-size:1.25rem"></i>
+        <span class="badge bg-danger rounded-pill notification-badge">5</span>
+      </button>
+      <div class="dropdown-menu dropdown-menu-end" style="width:320px">
+        <h6 class="dropdown-header">알림</h6>
+      </div>
+    </div>
+    <span class="desktop-only text-muted" style="font-size:0.85rem">관리자 홍길동</span>
+  </header>
+
+  <!-- 메인 -->
+  <main class="main-content">
+
+    <!-- 티켓 헤더 카드 -->
+    <div class="card stat-card mb-3">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start mb-3">
+          <div>
+            <h5 class="fw-bold mb-1">프린터 교체 요청</h5>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+              <span class="badge-status badge-delayed">⚠ 지연중</span>
+              <span class="badge-priority badge-urgent">긴급</span>
+              <span class="text-muted" style="font-size:0.85rem">TK-2026-00038</span>
+              <span class="text-muted" style="font-size:0.85rem">| 프로젝트A</span>
+              <span class="text-muted" style="font-size:0.85rem">| IT지원</span>
+            </div>
+          </div>
+          <!-- 데스크톱 액션 버튼 -->
+          <div class="d-flex gap-2 desktop-only">
+            <button class="btn btn-success btn-sm"><i class="bi bi-check-lg me-1"></i>완료요청</button>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown">관리자 수정</button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#adminEditModal"><i class="bi bi-pencil me-2"></i>정보 수정</a></li>
+                <li><a class="dropdown-item" href="#"><i class="bi bi-arrow-repeat me-2"></i>상태 변경</a></li>
+                <li><a class="dropdown-item" href="#"><i class="bi bi-people me-2"></i>담당자 변경</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- 정보 그리드 -->
+        <div class="row g-3" style="font-size:0.875rem">
+          <div class="col-6 col-md-3">
+            <div class="text-muted mb-1">등록자</div>
+            <div class="fw-semibold">김고객 (고객담당자)</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted mb-1">담당자</div>
+            <div class="fw-semibold">박철수 (Main)</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted mb-1">등록일</div>
+            <div>2026.04.02(수) 14:30</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted mb-1">접수일</div>
+            <div>2026.04.02(수) 18:30 <span class="badge bg-secondary" style="font-size:0.6rem">자동</span></div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted mb-1">처리희망일</div>
+            <div>2026.04.09(수)</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted mb-1">완료예정일</div>
+            <div>2026.04.09(수)</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted mb-1">처리기한</div>
+            <div class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>2026.04.04(금) — 3일 초과</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted mb-1">등록방법</div>
+            <div>직접</div>
+          </div>
+        </div>
+
+        <!-- 긴급 사유 -->
+        <div class="alert alert-danger mt-3 mb-0 py-2" style="font-size:0.85rem">
+          <i class="bi bi-exclamation-circle me-1"></i><strong>긴급처리 사유:</strong> 3층 전체 프린터 고장으로 업무 마비. 금일 중 교체 필요.
+        </div>
+      </div>
+    </div>
+
+    <!-- 내용 + 첨부파일 -->
+    <div class="card stat-card mb-3">
+      <div class="card-header bg-white">
+        <h6 class="mb-0"><i class="bi bi-file-text me-1"></i>문의 내용</h6>
+      </div>
+      <div class="card-body" style="font-size:0.9rem">
+        <p>3층 복합기(HP LaserJet Pro M404dn)에서 용지 걸림 오류가 반복 발생하고 있습니다.</p>
+        <p>서비스 센터 확인 결과 수리 불가 판정을 받았으며, 동일 모델 또는 상위 모델로 교체를 요청합니다.</p>
+        <p>현재 3층 직원 약 30명이 프린터를 사용하지 못하고 있어 긴급 교체가 필요합니다.</p>
+
+        <hr>
+        <h6 style="font-size:0.85rem"><i class="bi bi-paperclip me-1"></i>첨부파일 (2건)</h6>
+        <div class="d-flex flex-wrap gap-2">
+          <a href="#" class="btn btn-sm btn-outline-secondary"><i class="bi bi-file-pdf me-1"></i>수리불가_판정서.pdf <small class="text-muted">(1.2MB)</small></a>
+          <a href="#" class="btn btn-sm btn-outline-secondary"><i class="bi bi-file-image me-1"></i>고장사진.jpg <small class="text-muted">(3.5MB)</small></a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 탭: 댓글 / 내부메모 / 이력 -->
+    <div class="card stat-card mb-3">
+      <div class="card-header bg-white p-0">
+        <ul class="nav nav-tabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabComments" role="tab">
+              <i class="bi bi-chat-dots me-1"></i>댓글 <span class="badge bg-primary rounded-pill">3</span>
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabInternal" role="tab">
+              <i class="bi bi-lock me-1"></i>내부 메모 <span class="badge bg-secondary rounded-pill">1</span>
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabHistory" role="tab">
+              <i class="bi bi-clock-history me-1"></i>이력
+            </button>
+          </li>
+        </ul>
+      </div>
+      <div class="card-body">
+        <div class="tab-content">
+
+          <!-- 댓글 탭 -->
+          <div class="tab-pane fade show active" id="tabComments" role="tabpanel">
+            <!-- 입력창 (최상단) -->
+            <div class="mb-4">
+              <div class="input-group">
+                <input type="text" class="form-control" placeholder="댓글을 입력하세요...">
+                <button class="btn btn-outline-secondary" type="button"><i class="bi bi-paperclip"></i></button>
+                <button class="btn btn-primary" type="button"><i class="bi bi-send"></i></button>
+              </div>
+            </div>
+
+            <!-- 댓글 목록 (최신순, 메신저형) -->
+            <div class="d-flex flex-column gap-3">
+
+              <!-- 상대방 댓글 (좌측) -->
+              <div class="comment-other">
+                <div class="comment-bubble">
+                  빠른 처리 부탁드립니다. 3층 직원들이 1층까지 프린트하러 오고 있습니다.
+                </div>
+                <div class="comment-meta">
+                  <i class="bi bi-person-circle me-1"></i>김고객 | 04.07(월) 09:15
+                </div>
+              </div>
+
+              <!-- 내 댓글 (우측) -->
+              <div class="comment-mine">
+                <div class="comment-bubble">
+                  교체 모델 견적 확인 중입니다. 내일 오전까지 설치 완료하겠습니다.
+                  <div class="mt-1"><a href="#" class="text-primary" style="font-size:0.8rem"><i class="bi bi-file-pdf"></i> 견적서_HP.pdf</a></div>
+                </div>
+                <div class="comment-meta">
+                  박철수(나) | 04.07(월) 14:30 <span class="text-muted">*(수정됨)*</span>
+                </div>
+              </div>
+
+              <!-- 상대방 -->
+              <div class="comment-other">
+                <div class="comment-bubble">
+                  네, 감사합니다. 가능하면 오늘 중으로 부탁드립니다.
+                </div>
+                <div class="comment-meta">
+                  <i class="bi bi-person-circle me-1"></i>김고객 | 04.03(목) 10:00
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- 내부 메모 탭 -->
+          <div class="tab-pane fade" id="tabInternal" role="tabpanel">
+            <div class="mb-4">
+              <div class="input-group">
+                <input type="text" class="form-control" placeholder="내부 메모를 입력하세요...">
+                <button class="btn btn-warning" type="button"><i class="bi bi-send"></i></button>
+              </div>
+              <small class="text-warning"><i class="bi bi-lock me-1"></i>내부 메모는 지원담당자와 관리자만 볼 수 있습니다.</small>
+            </div>
+            <div class="comment-mine">
+              <div class="comment-bubble" style="background:#FFF3CD">
+                HP 서비스센터에 확인한 결과 M404dn 모델은 단종이라 M404dw로 대체 설치 예정. 가격 차이 5만원 추가 발생.
+              </div>
+              <div class="comment-meta">박철수(나) | 04.07(월) 11:20</div>
+            </div>
+          </div>
+
+          <!-- 이력 탭 -->
+          <div class="tab-pane fade" id="tabHistory" role="tabpanel">
+            <div class="list-group list-group-flush">
+              <div class="list-group-item px-0 py-2">
+                <div class="d-flex align-items-center">
+                  <span class="badge bg-danger me-2" style="width:8px;height:8px;padding:0;border-radius:50%"></span>
+                  <div>
+                    <div style="font-size:0.85rem"><strong>DELAYED</strong> ← IN_PROGRESS <span class="text-muted ms-1">(자동 — 처리기한 초과)</span></div>
+                    <small class="text-muted">2026.04.04(금) 18:01 | SYSTEM</small>
+                  </div>
+                </div>
+              </div>
+              <div class="list-group-item px-0 py-2">
+                <div class="d-flex align-items-center">
+                  <span class="badge bg-success me-2" style="width:8px;height:8px;padding:0;border-radius:50%"></span>
+                  <div>
+                    <div style="font-size:0.85rem"><strong>IN_PROGRESS</strong> ← RECEIVED <span class="text-muted ms-1">(담당자 확인)</span></div>
+                    <small class="text-muted">2026.04.03(목) 09:05 | 박철수</small>
+                  </div>
+                </div>
+              </div>
+              <div class="list-group-item px-0 py-2">
+                <div class="d-flex align-items-center">
+                  <span class="badge bg-info me-2" style="width:8px;height:8px;padding:0;border-radius:50%"></span>
+                  <div>
+                    <div style="font-size:0.85rem"><strong>RECEIVED</strong> ← REGISTERED <span class="text-muted ms-1">(자동접수 — 4근무시간 경과)</span></div>
+                    <small class="text-muted">2026.04.02(수) 18:30 | SYSTEM</small>
+                  </div>
+                </div>
+              </div>
+              <div class="list-group-item px-0 py-2">
+                <div class="d-flex align-items-center">
+                  <span class="badge bg-primary me-2" style="width:8px;height:8px;padding:0;border-radius:50%"></span>
+                  <div>
+                    <div style="font-size:0.85rem">처리기한 설정: <strong>2026.04.09(수)</strong> <span class="text-muted ms-1">(자동접수 — 처리희망일 적용)</span></div>
+                    <small class="text-muted">2026.04.02(수) 18:30 | SYSTEM</small>
+                  </div>
+                </div>
+              </div>
+              <div class="list-group-item px-0 py-2">
+                <div class="d-flex align-items-center">
+                  <span class="badge bg-warning me-2" style="width:8px;height:8px;padding:0;border-radius:50%"></span>
+                  <div>
+                    <div style="font-size:0.85rem"><strong>REGISTERED</strong> <span class="text-muted ms-1">(티켓 등록)</span></div>
+                    <small class="text-muted">2026.04.02(수) 14:30 | 김고객</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 관리자 수정 Modal -->
+  <div class="modal fade" id="adminEditModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-pencil me-1"></i>관리자 수정</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">수정 항목</label>
+            <select class="form-select">
+              <option>제목</option>
+              <option>카테고리</option>
+              <option>우선순위</option>
+              <option>처리기한</option>
+              <option>상태 (워크플로우 우회)</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">새 값</label>
+            <input type="text" class="form-control" placeholder="변경할 값을 입력하세요">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">수정 사유 <span class="text-danger">*</span></label>
+            <textarea class="form-control" rows="2" placeholder="수정 사유를 입력하세요 (필수)"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">취소</button>
+          <button type="button" class="btn btn-primary">수정 적용</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 모바일 사이드바 -->
+  <div class="offcanvas offcanvas-start" id="mobileSidebar">
+    <div class="offcanvas-header"><h5>메뉴</h5><button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button></div>
+    <div class="offcanvas-body p-0">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a class="nav-link" href="02-dashboard-admin.html"><i class="bi bi-grid-1x2 me-2"></i>대시보드</a></li>
+        <li class="nav-item"><a class="nav-link active" href="03-ticket-list.html"><i class="bi bi-ticket-detailed me-2"></i>티켓</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 모바일 액션 바 (하단 고정) -->
+  <div class="mobile-action-bar" role="toolbar" aria-label="티켓 액션">
+    <div class="d-flex gap-2 h-100 align-items-center">
+      <button class="btn btn-success flex-fill" style="min-height:44px">
+        <i class="bi bi-check-lg me-1"></i>완료요청
+      </button>
+      <button class="btn btn-outline-secondary" style="min-height:44px" data-bs-toggle="modal" data-bs-target="#adminEditModal">
+        <i class="bi bi-pencil"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- 모바일 하단 탭 -->
+  <nav class="mobile-bottom-nav" aria-label="하단 탭">
+    <div class="d-flex align-items-center justify-content-around h-100">
+      <a href="02-dashboard-admin.html" class="nav-link text-center"><span class="nav-icon"><i class="bi bi-grid-1x2"></i></span>대시보드</a>
+      <a href="03-ticket-list.html" class="nav-link active text-center"><span class="nav-icon"><i class="bi bi-ticket-detailed-fill"></i></span>티켓</a>
+      <a href="#" class="nav-link text-center"><span class="nav-icon"><i class="bi bi-bell"></i></span>알림</a>
+      <a href="#" class="nav-link text-center"><span class="nav-icon"><i class="bi bi-gear"></i></span>설정</a>
+    </div>
+  </nav>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
