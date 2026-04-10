@@ -4,9 +4,9 @@
 |------|------|
 | 기능명 | 서비스데스크 (nu-ServiceDesk) |
 | 작성일 | 2026-04-09 |
-| 최종 수정 | 2026-04-10 (V2.3 UI/UX 개선 현행화) |
-| 버전 | V2.3 (프로젝트 부서 자유텍스트·코드 자동채번·멤버 토글·티켓 첨부파일) |
-| 상태 | Completed — V2.3 패치 적용 완료 (2026-04-10) |
+| 최종 수정 | 2026-04-11 (V2.4 문서 수치 통일 패치) |
+| 버전 | V2.4 (수치 통일: API 52개, 이벤트 15개, 전이 매트릭스 22규칙, Rate Limit 2계층, 디자인 토큰 상태명 수정) |
+| 상태 | Completed — V2.4 패치 적용 완료 (2026-04-11) |
 | Plan 참조 | nu-servicedesk.plan.md |
 | PRD 참조 | nu-servicedesk.prd.md |
 | 선택 아키텍처 | Option C — Pragmatic Balance |
@@ -68,7 +68,7 @@ Browser/Mobile
 Next.js 15 (App Router)
 ├── app/(auth)/                  # 미인증 영역
 ├── app/(main)/                  # 인증 영역 (RBAC 미들웨어)
-├── app/api/                     # API Routes (51개 엔드포인트)
+├── app/api/                     # API Routes (52개 엔드포인트)
 └── middleware.ts                # RBAC 가드 + HMAC role_hint 검증
     ↓
 lib/
@@ -444,7 +444,7 @@ interface ApiResponse<T> {
 |---------|-------------|---------|
 | 인증 (auth) | 4개 | POST /api/auth/login, logout, session, password |
 | 프로필 | 1개 | GET/PUT /api/profile |
-| 회사/부서 | 5개 | /api/companies, /api/companies/[id]/departments |
+| 회사 | 4개 | /api/companies, /api/companies/[id], /api/companies/[id]/deactivate (V2.3: departments 라우트 제거) |
 | 사용자 | 3개 | /api/users, /api/users/[id], reset-password |
 | 프로젝트 | 3개 | /api/projects, /api/projects/[id], members |
 | 카테고리/공휴일/설정 | 5개 | /api/categories, /api/holidays, /api/settings |
@@ -599,7 +599,7 @@ if (data.isActive === false && existing.isActive === true) {
 
 ## 5. State Machine Design
 
-### 5.1 티켓 상태 전이 (9개 상태, 17개 이벤트)
+### 5.1 티켓 상태 전이 (9개 상태, 15개 이벤트, 22개 전이 규칙)
 
 ```
 States (9개):
@@ -612,15 +612,46 @@ Events (15개):
   APPROVE_EXTEND, REJECT_EXTEND, AUTO_APPROVE_EXTEND, REQUEST_COMPLETE,
   APPROVE_COMPLETE, REJECT_COMPLETE, AUTO_COMPLETE, RATE_SATISFACTION,
   AUTO_CLOSE, CANCEL
+
+※ 참고: route 파일 수(52개)와 이벤트 수(15개)는 별개 개념.
+  이벤트는 상태 전이를 트리거하는 논리적 액션이며, API 엔드포인트는 HTTP 요청 단위.
 ```
 
-### 5.2 REJECT_COMPLETE — previousStatus 기반 복귀
+### 5.2 전이 매트릭스 (22개 규칙)
+
+| # | From | Event | To | Allowed Roles | Guard | Side Effects |
+|---|------|-------|----|---------------|-------|-------------|
+| 1 | REGISTERED | RECEIVE | RECEIVED | support, admin | — | 담당자 배정, 알림 |
+| 2 | REGISTERED | AUTO_RECEIVE | RECEIVED | SYSTEM (batch) | 4근무시간 경과 | 알림 |
+| 3 | RECEIVED | CONFIRM | IN_PROGRESS | support, admin | — | 알림 |
+| 4 | RECEIVED | DELAY_DETECT | DELAYED | SYSTEM (batch) | deadline < now | 알림 |
+| 5 | IN_PROGRESS | DELAY_DETECT | DELAYED | SYSTEM (batch) | deadline < now | 알림 |
+| 6 | IN_PROGRESS | REQUEST_EXTEND | EXTEND_REQUESTED | support | 기한 8h전 | 연기요청 생성 |
+| 7 | IN_PROGRESS | REQUEST_COMPLETE | COMPLETE_REQUESTED | support, admin | count < 3 | 완료요청 생성 |
+| 8 | DELAYED | CONFIRM | IN_PROGRESS | support, admin | — | 기한 +5근무일 자동 연장 |
+| 9 | DELAYED | REQUEST_EXTEND | EXTEND_REQUESTED | support | 기한 8h전 | 연기요청 생성 |
+| 10 | DELAYED | REQUEST_COMPLETE | COMPLETE_REQUESTED | support, admin | count < 3 | 완료요청 생성 |
+| 11 | EXTEND_REQUESTED | APPROVE_EXTEND | IN_PROGRESS | customer, admin | — | 기한 변경, 이력 기록 |
+| 12 | EXTEND_REQUESTED | AUTO_APPROVE_EXTEND | IN_PROGRESS | SYSTEM (batch) | 4근무시간 경과 | 기한 변경, 이력 기록 |
+| 13 | EXTEND_REQUESTED | REJECT_EXTEND | *previousStatus* | customer, admin | — | isDeleted=true |
+| 14 | COMPLETE_REQUESTED | APPROVE_COMPLETE | SATISFACTION_PENDING | customer, admin | — | 만족도 stub 생성 |
+| 15 | COMPLETE_REQUESTED | REJECT_COMPLETE | *previousStatus* | customer, admin | attempt ≤ 2 | 2회차 시 에스컬레이션 |
+| 16 | COMPLETE_REQUESTED | AUTO_COMPLETE | SATISFACTION_PENDING | SYSTEM (batch) | 3회차 자동승인 | 만족도 stub 생성 |
+| 17 | SATISFACTION_PENDING | RATE_SATISFACTION | CLOSED | customer, admin | — | 만족도 기록 |
+| 18 | SATISFACTION_PENDING | AUTO_CLOSE | CLOSED | SYSTEM (batch) | 5근무일 미응답 | autoCompleted=true |
+| 19 | REGISTERED | CANCEL | CANCELLED | admin | — | — |
+| 20 | RECEIVED | CANCEL | CANCELLED | admin | — | — |
+| 21 | IN_PROGRESS | CANCEL | CANCELLED | admin | — | — |
+| 22 | DELAYED | CANCEL | CANCELLED | admin | — | — |
+| — | EXTEND_REQUESTED | CANCEL | CANCELLED | admin | — | — |
+
+### 5.3 REJECT_COMPLETE — previousStatus 기반 복귀
 
 | From State | Event | To State | Guard Conditions | Side Effects |
 |-----------|-------|----------|-----------------|--------------|
 | COMPLETE_REQUESTED | `REJECT_COMPLETE` | **CompleteRequest.previousStatus** | 고객담당자, attempt <= 2 | 2회차 반려 시 관리책임자 알림. previousStatus로 복귀 후 즉시 기한 재확인 |
 
-### 5.3 낙관적 락 구현 패턴
+### 5.4 낙관적 락 구현 패턴
 
 ```typescript
 // Prisma 조건부 UPDATE 대신 $executeRaw RETURNING * 사용
@@ -885,26 +916,37 @@ export function generateInitialPassword(): string {
 
 ```typescript
 // PUT /api/auth/password 처리 후:
-// 1. Redis에서 현재 사용자의 전체 세션 삭제
-const sessionKeys = await redis.keys(`session:*`);
-for (const key of sessionKeys) {
-  const data = await redis.get(key);
-  if (data && JSON.parse(data).userId === currentUserId) {
-    await redis.del(key);
-  }
+// 1. Redis Set 인덱스 기반 전체 세션 삭제 (KEYS/SCAN 대신 O(1) 조회)
+const indexKey = `user_sessions:${currentUserId}`;
+const sessionIds = await redis.smembers(indexKey);
+const pipeline = redis.pipeline();
+for (const sid of sessionIds) {
+  pipeline.del(`session:${sid}`);
 }
+pipeline.del(indexKey);
+await pipeline.exec();
 // 2. 응답: { success: true, requireRelogin: true }
 // 3. 클라이언트: 로그인 페이지 리다이렉트
 ```
 
-### 7.5 Rate Limiting 정책 (4종)
+### 7.5 Rate Limiting 및 계정 잠금 정책
 
+**두 계층으로 구분됨:**
+
+**계층 1: 계정 잠금 (Account Lock)** — 비즈니스 규칙 (`BUSINESS_RULES.LOGIN_MAX_ATTEMPTS`)
+| 대상 | 한도 | 응답 | 지속 시간 |
+|------|------|------|----------|
+| 로그인 실패 (계정 기준) | 5회 연속 실패 | 423 ACCOUNT_LOCKED | 15분 (`LOGIN_LOCK_SECONDS`) |
+
+**계층 2: IP Rate Limiting** — 인프라 레벨
 | 대상 | 한도 | 초과 응답 |
 |------|------|---------|
-| 로그인 | 3회 → 429 | Too Many Requests |
+| 로그인 API (IP 기준) | 10회/15분 | 429 Too Many Requests |
 | Presigned URL 발급 | 별도 정책 | 429 |
 | 전체 API | 별도 정책 | 429 |
 | Push 구독 | 별도 정책 | 429 |
+
+> **참고**: 계정 잠금과 IP Rate Limiting은 독립적으로 동작. 동일 IP에서 다른 계정 시도 시 IP Rate Limit 적용, 다른 IP에서 동일 계정 시도 시 Account Lock 적용.
 
 ---
 
@@ -1058,16 +1100,16 @@ Mobile (< 768px):
 
 #### 티켓 상태 색상 (Bootstrap 5 기준)
 
-| 상태 | Bootstrap Variant | 아이콘 |
+| 상태 (enum) | Bootstrap Variant | 아이콘 |
 |------|------------------|:------:|
-| PENDING | warning | 시계 |
-| AUTO_RECEIVED | info | 체크서클 |
-| IN_PROGRESS | primary | 스피너 |
+| REGISTERED | warning | 시계 |
+| RECEIVED | info | 체크서클 |
+| IN_PROGRESS | primary (success) | 스피너 |
 | DELAYED | danger + pulse | 경고 |
-| EXTEND_REQUESTED | orange | 일시정지 |
-| COMPLETE_REQUESTED | indigo | 체크 |
+| EXTEND_REQUESTED | orange (secondary) | 일시정지 |
+| COMPLETE_REQUESTED | indigo (primary) | 체크 |
 | SATISFACTION_PENDING | purple | 별 |
-| CLOSED | secondary | 원 |
+| CLOSED | secondary (dark) | 원 |
 | CANCELLED | secondary (gray-700) | 엑스 |
 
 > **[V2.1 접근성]** CANCELLED: gray-500 → **gray-700** 보정 (WCAG AA 4.5:1 색상 대비 충족)
@@ -1269,7 +1311,7 @@ Module 12: 대시보드 + 온보딩 + 모바일 레이아웃
 5. **비즈니스 상수** — `lib/constants.ts`의 BUSINESS_RULES 참조. 매직넘버 금지.
 6. **트랜잭션** — Web Push 발송은 트랜잭션 외부에서 비동기. DB 알림 INSERT는 트랜잭션 내부.
 7. **OWASP** — 비밀번호 변경 시 전체 세션 폐기. role_hint 쿠키 HMAC 서명 필수.
-8. **Redis SCAN** — 배치 잡에서 KEYS 명령 금지. SCAN 사용으로 프로덕션 안전성 확보.
+8. **Redis KEYS 금지** — KEYS 명령 사용 금지. 세션 삭제는 `user_sessions:{userId}` Set 인덱스 + pipeline DEL 사용.
 
 ---
 
@@ -1298,7 +1340,7 @@ Module 12: 대시보드 + 온보딩 + 모바일 레이아웃
 | Design Match Rate | ≥ 90% | **98.3%** (v2.3.0 Runtime 공식) |
 | 단위 테스트 통과율 | 100% | **134/134** (100%) |
 | L1 API 통합 테스트 | 100% | **11/11** (100%) |
-| API 엔드포인트 구현 | 51개 | **51/51** (100%) |
+| API 엔드포인트 구현 | 51개 | **52/52** (100%) |
 | 배치 잡 구현 | 10개 | **10/10** (100%) |
 | TypeScript 소스 에러 | 0건 | **0건** (strict mode) |
 | CSRF 방어 | ✅ | **✅** (Origin 검증 + SameSite=Strict) |
@@ -1324,12 +1366,12 @@ Overall = (Structural × 0.15) + (Functional × 0.25)
 | TypeScript/TSX 파일 | 121개 |
 | 코드 라인 (Logic) | ~8,500 LOC |
 | Prisma 모델 | 22개 |
-| API 엔드포인트 | 51개 |
+| API 엔드포인트 | 52개 (route 파일 기준) |
 | 배치 잡 | 10개 |
 | 단위 테스트 | 134개 |
 | 알림 타입 | 21개 |
 | 티켓 상태 | 9개 |
-| 상태 전이 이벤트 | 17개 |
+| 상태 전이 이벤트 | 15개 (22개 전이 규칙) |
 
 ### Success Criteria 최종 상태
 

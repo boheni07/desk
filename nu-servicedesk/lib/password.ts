@@ -10,27 +10,36 @@ const SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
  * Generate a secure random initial password satisfying complexity requirements.
  * 2 uppercase + 2 lowercase + 2 digits + 2 special characters, shuffled (8 chars total).
  */
+/** Unbiased random index using rejection sampling */
+function secureRandomIndex(max: number): number {
+  const limit = Math.floor(256 / max) * max;
+  let r: number;
+  do {
+    r = randomBytes(1)[0];
+  } while (r >= limit);
+  return r % max;
+}
+
 export function generateInitialPassword(): string {
   const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   const lower = 'abcdefghjkmnpqrstuvwxyz';
   const digits = '23456789';
   const special = '@#$!';
 
-  const bytes = randomBytes(16);
   const parts = [
-    upper[bytes[0] % upper.length],
-    upper[bytes[1] % upper.length],
-    lower[bytes[2] % lower.length],
-    lower[bytes[3] % lower.length],
-    digits[bytes[4] % digits.length],
-    digits[bytes[5] % digits.length],
-    special[bytes[6] % special.length],
-    special[bytes[7] % special.length],
+    upper[secureRandomIndex(upper.length)],
+    upper[secureRandomIndex(upper.length)],
+    lower[secureRandomIndex(lower.length)],
+    lower[secureRandomIndex(lower.length)],
+    digits[secureRandomIndex(digits.length)],
+    digits[secureRandomIndex(digits.length)],
+    special[secureRandomIndex(special.length)],
+    special[secureRandomIndex(special.length)],
   ];
 
-  // Fisher-Yates shuffle using secure random bytes
+  // Fisher-Yates shuffle
   for (let i = parts.length - 1; i > 0; i--) {
-    const j = bytes[8 + i] % (i + 1);
+    const j = secureRandomIndex(i + 1);
     [parts[i], parts[j]] = [parts[j], parts[i]];
   }
 
@@ -69,6 +78,10 @@ export function validatePasswordStrength(password: string): {
 
   if (password.length < 8) {
     errors.push('비밀번호는 최소 8자 이상이어야 합니다.');
+  }
+
+  if (password.length > 72) {
+    errors.push('비밀번호는 72자 이내여야 합니다.');
   }
 
   if (!/[A-Z]/.test(password)) {

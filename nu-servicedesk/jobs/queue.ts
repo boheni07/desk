@@ -6,23 +6,25 @@ import { logger } from '@/lib/logger';
 
 // BullMQ requires its own IORedis connection (cannot share with session redis)
 // REDIS_URL 파싱으로 REDIS_HOST/REDIS_PORT 별도 설정 불필요
-function parseRedisUrl(url: string): { host: string; port: number } {
+function parseRedisUrl(url: string): { host: string; port: number; password?: string } {
   try {
     const parsed = new URL(url);
     return {
       host: parsed.hostname || 'localhost',
       port: parseInt(parsed.port || '6379', 10),
+      password: parsed.password || undefined,
     };
   } catch {
     return { host: 'localhost', port: 6379 };
   }
 }
 
-const { host, port } = parseRedisUrl(process.env.REDIS_URL ?? 'redis://localhost:6379');
+const { host, port, password } = parseRedisUrl(process.env.REDIS_URL ?? 'redis://localhost:6379');
 
 const redisConnection = {
   host,
   port,
+  ...(password ? { password } : {}),
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
 };

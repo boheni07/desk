@@ -249,6 +249,7 @@ model Ticket {
   @@index([status, deadline])
   @@index([projectId, status])
   @@index([registeredById, status], map: "idx_tickets_registered_by_status")
+  @@index([customerUserId, status], map: "idx_tickets_customer_status")
   @@index([createdAt])
   @@map("tickets")
 }
@@ -292,8 +293,8 @@ model TicketStatusHistory {
   reason          String?
   createdAt       DateTime      @default(now()) @map("created_at")
 
-  ticket          Ticket   @relation(fields: [ticketId], references: [id])
-  actor           User?    @relation("ActorUser", fields: [actorId], references: [id])
+  ticket          Ticket   @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  actor           User?    @relation("ActorUser", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([ticketId, createdAt])
   @@map("ticket_status_history")
@@ -311,7 +312,7 @@ model TicketDeadlineHistory {
   actorId         String?   @map("actor_id")
   createdAt       DateTime  @default(now()) @map("created_at")
 
-  ticket          Ticket   @relation(fields: [ticketId], references: [id])
+  ticket          Ticket   @relation(fields: [ticketId], references: [id], onDelete: Restrict)
   actor           User?    @relation("DeadlineHistoryActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([ticketId, createdAt])
@@ -331,8 +332,8 @@ model TicketAdminEdit {
   reason          String?
   createdAt       DateTime       @default(now()) @map("created_at")
 
-  ticket          Ticket   @relation(fields: [ticketId], references: [id])
-  admin           User     @relation(fields: [adminId], references: [id])
+  ticket          Ticket   @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  admin           User     @relation(fields: [adminId], references: [id], onDelete: Restrict)
 
   @@index([ticketId, createdAt])
   @@map("ticket_admin_edits")
@@ -381,13 +382,14 @@ model ExtendRequest {
   isDeleted       Boolean             @default(false) @map("is_deleted")  // V2.1: soft-delete
   createdAt       DateTime            @default(now()) @map("created_at")
 
-  ticket          Ticket   @relation(fields: [ticketId], references: [id])
-  requester       User     @relation("ExtendRequester", fields: [requesterId], references: [id])
-  approver        User?    @relation("ExtendApprover", fields: [approverId], references: [id])
+  ticket          Ticket   @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  requester       User     @relation("ExtendRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  approver        User?    @relation("ExtendApprover", fields: [approverId], references: [id], onDelete: SetNull)
 
-  @@index([ticketId])
+  @@index([ticketId, isDeleted])
   @@index([status, createdAt])
-  @@unique([ticketId])  // 앱 레벨에서 isDeleted=false 체크
+  // Note: unique constraint removed — app-level check (isDeleted=false) prevents duplicates
+  // DB-level @@unique([ticketId]) conflicted with soft-delete (second request after delete failed)
   @@map("extend_requests")
 }
 
@@ -414,9 +416,9 @@ model CompleteRequest {
   approvedAt      DateTime?           @map("approved_at")
   createdAt       DateTime            @default(now()) @map("created_at")
 
-  ticket          Ticket   @relation(fields: [ticketId], references: [id])
-  requester       User     @relation("CompleteRequester", fields: [requesterId], references: [id])
-  approver        User?    @relation("CompleteApprover", fields: [approverId], references: [id])
+  ticket          Ticket   @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  requester       User     @relation("CompleteRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  approver        User?    @relation("CompleteApprover", fields: [approverId], references: [id], onDelete: SetNull)
 
   @@index([ticketId, attemptNumber])
   @@index([status, createdAt])  // V2.1: 자동승인 배치 최적화
@@ -436,8 +438,8 @@ model SatisfactionRating {
   reminderSentAt  DateTime? @map("reminder_sent_at")   // V2.1: 리마인더 중복 방지
   createdAt       DateTime  @default(now()) @map("created_at")
 
-  ticket      Ticket   @relation(fields: [ticketId], references: [id])
-  user        User?    @relation(fields: [userId], references: [id])
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("satisfaction_ratings")
 }
@@ -456,8 +458,8 @@ model Comment {
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
 
-  ticket      Ticket       @relation(fields: [ticketId], references: [id])
-  author      User         @relation(fields: [authorId], references: [id])
+  ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  author      User         @relation(fields: [authorId], references: [id], onDelete: Restrict)
   attachments Attachment[]
 
   @@index([ticketId, createdAt])
@@ -483,8 +485,8 @@ model Attachment {
   r2Key       String    @map("r2_key")
   uploadedAt  DateTime  @default(now()) @map("uploaded_at")
 
-  ticket      Ticket?  @relation(fields: [ticketId], references: [id])
-  comment     Comment? @relation(fields: [commentId], references: [id])
+  ticket      Ticket?  @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  comment     Comment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
   uploader    User?    @relation("AttachmentUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
 
   @@index([ticketId])
@@ -507,8 +509,8 @@ model Notification {
   isDeleted   Boolean             @default(false) @map("is_deleted")
   createdAt   DateTime            @default(now()) @map("created_at")
 
-  user        User     @relation(fields: [userId], references: [id])
-  ticket      Ticket?  @relation(fields: [ticketId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ticket      Ticket?  @relation(fields: [ticketId], references: [id], onDelete: SetNull)
 
   @@index([userId, isDeleted, isRead, createdAt])  // V2.1: isDeleted 포함
   @@map("notifications")
@@ -550,7 +552,7 @@ model PushSubscription {
   lastUsedAt  DateTime  @default(now()) @map("last_used_at")
   createdAt   DateTime  @default(now()) @map("created_at")
 
-  user        User     @relation(fields: [userId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("push_subscriptions")

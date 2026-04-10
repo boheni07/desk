@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { getBusinessHoursBetween } from '@/lib/business-hours';
 import { BUSINESS_RULES } from '@/lib/constants';
-import { getHolidays } from './auto-receive.job';
+import { getHolidays } from '@/lib/holidays';
 import {
   createNotification,
   getTicketAssigneeIds,
@@ -49,19 +49,20 @@ export async function processExtendAutoApprove(_job: Job): Promise<void> {
     // Phase 1: Auto-approve (>= EXTEND_AUTO_APPROVE_HOURS)
     if (elapsed >= BUSINESS_RULES.EXTEND_AUTO_APPROVE_HOURS) {
       // Auto-approve the extend request
-      await prisma.$transaction(async (tx) => {
-        // Update ExtendRequest
+      const transitioned = await prisma.$transaction(async (tx) => {
+        // Update ExtendRequest (include isDeleted: true to match approveExtend() behavior)
         await tx.extendRequest.update({
           where: { id: req.id },
           data: {
             status: 'APPROVED',
             autoApproved: true,
             approvedAt: now,
+            isDeleted: true,
           },
         });
 
-        // Update ticket deadline to the new deadline from the request
-        await tx.$queryRaw`
+        // Update ticket deadline (optimistic lock with result validation)
+        const result = await tx.$queryRaw<{ id: string }[]>`
           UPDATE tickets
           SET deadline = ${req.newDeadline},
               status = 'IN_PROGRESS'::"TicketStatus",
@@ -70,6 +71,7 @@ export async function processExtendAutoApprove(_job: Job): Promise<void> {
             AND status = 'EXTEND_REQUESTED'::"TicketStatus"
           RETURNING id
         `;
+        if (result.length === 0) return false;
 
         // Record deadline history
         await tx.ticketDeadlineHistory.create({
@@ -93,7 +95,11 @@ export async function processExtendAutoApprove(_job: Job): Promise<void> {
             reason: '연기 자동승인',
           },
         });
+
+        return true;
       });
+
+      if (!transitioned) continue;
 
       // Notify ticket creator + assignees (outside transaction)
       const notifyIds = new Set<string>();

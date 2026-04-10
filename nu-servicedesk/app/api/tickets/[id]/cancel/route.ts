@@ -79,33 +79,38 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const previousStatus = ticket.status;
 
-    // Optimistic locking: only cancel if status hasn't changed
-    const result = await prisma.$queryRaw<any[]>`
-      UPDATE tickets
-      SET status = 'CANCELLED'::"TicketStatus",
-          updated_at = NOW()
-      WHERE id = ${id} AND status = ${previousStatus}::text::"TicketStatus"
-      RETURNING *
-    `;
+    // Atomic: optimistic lock UPDATE + status history in single transaction
+    const txResult = await prisma.$transaction(async (tx) => {
+      const result = await tx.$queryRaw<{ id: string }[]>`
+        UPDATE tickets
+        SET status = 'CANCELLED'::"TicketStatus",
+            updated_at = NOW()
+        WHERE id = ${id} AND status = ${previousStatus}::"TicketStatus"
+        RETURNING id
+      `;
 
-    if (result.length === 0) {
+      if (result.length === 0) return null;
+
+      await tx.ticketStatusHistory.create({
+        data: {
+          ticketId: id,
+          previousStatus,
+          newStatus: 'CANCELLED',
+          actorId: session.userId,
+          actorType: 'USER',
+          reason,
+        },
+      });
+
+      return result;
+    });
+
+    if (!txResult) {
       return NextResponse.json(
         { success: false, error: { code: 'CONFLICT', message: '티켓 상태가 변경되었습니다. 새로고침 후 다시 시도해 주세요.', status: 409 } },
         { status: 409 },
       );
     }
-
-    // Record status history
-    await prisma.ticketStatusHistory.create({
-      data: {
-        ticketId: id,
-        previousStatus,
-        newStatus: 'CANCELLED',
-        actorId: session.userId,
-        actorType: 'USER',
-        reason,
-      },
-    });
 
     const updated = await prisma.ticket.findUnique({
       where: { id },

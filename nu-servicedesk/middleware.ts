@@ -9,6 +9,7 @@ const PUBLIC_PATHS = new Set([
   '/login',
   '/api/auth/login',
   '/api/health',
+  '/api/push-subscriptions/vapid-key',
 ]);
 
 // Check if a path is public (exact match or starts with a public prefix)
@@ -16,13 +17,12 @@ function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;
   // Static assets and Next.js internals
   if (pathname.startsWith('/_next/') || pathname.startsWith('/favicon')) return true;
-  // Local file upload endpoint (dev: replaces R2 presigned PUT)
-  if (pathname.startsWith('/api/attachments/local-upload')) return true;
+  // Local file upload endpoint: requires authentication (removed from public paths for security)
   return false;
 }
 
 // Verify role_hint cookie HMAC signature using Web Crypto API (Edge Runtime compatible)
-// Equivalent to Node.js: createHmac('sha256', secret).update(role).digest('hex').slice(0, 16)
+// Uses timing-safe comparison via double-HMAC to prevent timing attacks
 async function verifyRoleHint(value: string, secret: string): Promise<string | null> {
   try {
     const dotIndex = value.lastIndexOf('.');
@@ -46,9 +46,17 @@ async function verifyRoleHint(value: string, secret: string): Promise<string | n
     const signatureBuffer = await crypto.subtle.sign('HMAC', key, msgData);
     const hashArray = Array.from(new Uint8Array(signatureBuffer));
     const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-    const expected = hashHex.slice(0, 16);
 
-    return sig === expected ? role : null;
+    // Accept both 32-char (current) and 16-char (legacy) HMAC signatures
+    const expected = hashHex.slice(0, sig.length === 16 ? 16 : 32);
+
+    // Timing-safe comparison for Edge Runtime (no crypto.timingSafeEqual)
+    if (sig.length !== expected.length) return null;
+    const sigBytes = encoder.encode(sig);
+    const expBytes = encoder.encode(expected);
+    let diff = 0;
+    for (let i = 0; i < sigBytes.length; i++) diff |= sigBytes[i] ^ expBytes[i];
+    return diff === 0 ? role : null;
   } catch {
     return null;
   }

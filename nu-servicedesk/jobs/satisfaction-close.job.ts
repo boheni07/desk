@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { getBusinessHoursBetween } from '@/lib/business-hours';
 import { BUSINESS_RULES } from '@/lib/constants';
-import { getHolidays } from './auto-receive.job';
+import { getHolidays } from '@/lib/holidays';
 import { createNotification } from '@/lib/notification-helper';
 import { approveComplete } from '@/lib/ticket-workflow';
 
@@ -102,7 +102,7 @@ export async function processSatisfactionClose(_job: Job): Promise<void> {
           });
         }
 
-        await tx.$queryRaw`
+        const result = await tx.$queryRaw<{ id: string }[]>`
           UPDATE tickets
           SET status = 'CLOSED'::"TicketStatus",
               updated_at = NOW()
@@ -110,6 +110,7 @@ export async function processSatisfactionClose(_job: Job): Promise<void> {
             AND status = 'SATISFACTION_PENDING'::"TicketStatus"
           RETURNING id
         `;
+        if (result.length === 0) return; // Already transitioned
 
         await tx.ticketStatusHistory.create({
           data: {

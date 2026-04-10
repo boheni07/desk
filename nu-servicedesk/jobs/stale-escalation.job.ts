@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { getBusinessHoursBetween } from '@/lib/business-hours';
 import { BUSINESS_RULES } from '@/lib/constants';
-import { getHolidays } from './auto-receive.job';
+import { getHolidays } from '@/lib/holidays';
 import { createNotificationsForUsers, getSupervisorUserIds } from '@/lib/notification-helper';
 
 /**

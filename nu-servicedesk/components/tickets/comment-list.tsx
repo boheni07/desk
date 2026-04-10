@@ -11,7 +11,8 @@ import Form from 'react-bootstrap/Form';
 import Spinner from 'react-bootstrap/Spinner';
 import Alert from 'react-bootstrap/Alert';
 import ProgressBar from 'react-bootstrap/ProgressBar';
-import { BsPencil, BsTrash, BsLock, BsChatDots, BsPaperclip, BsX, BsFileEarmark, BsFileImage, BsFilePdf, BsFileSpreadsheet, BsFileText, BsDownload } from 'react-icons/bs';
+import Nav from 'react-bootstrap/Nav';
+import { BsPencil, BsTrash, BsLock, BsChatDots, BsChatLeftText, BsPaperclip, BsX, BsFileEarmark, BsFileImage, BsFilePdf, BsFileSpreadsheet, BsFileText, BsDownload } from 'react-icons/bs';
 
 // ─────────────────────────────────────────
 // Types
@@ -116,6 +117,13 @@ export default function CommentList({ ticketId, currentUserId, currentUserRole }
   // Delete
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  // Tab filter: 'all' | 'public' | 'internal'
+  const [activeTab, setActiveTab] = useState<'all' | 'public' | 'internal'>('all');
+  const handleTabChange = (tab: 'all' | 'public' | 'internal') => {
+    setActiveTab(tab);
+    setIsInternal(tab === 'internal');
+  };
 
   const isStaff = currentUserRole === 'admin' || currentUserRole === 'support';
 
@@ -318,14 +326,62 @@ export default function CommentList({ ticketId, currentUserId, currentUserRole }
   };
 
   const activeCount = comments.filter((c) => !c.isDeleted).length;
+  const publicCount = comments.filter((c) => !c.isDeleted && c.type === 'PUBLIC').length;
+  const internalCount = comments.filter((c) => !c.isDeleted && c.type === 'INTERNAL').length;
+
+  const targetType = activeTab === 'public' ? 'PUBLIC' : activeTab === 'internal' ? 'INTERNAL' : null;
+  const filteredComments = targetType
+    ? comments.filter((c) => c.type === targetType)
+    : comments;
 
   // ── Render ──
 
   return (
     <Card className="mb-3">
-      <Card.Header className="bg-white d-flex justify-content-between align-items-center">
-        <strong><BsChatDots className="me-1" />댓글</strong>
-        <span className="text-muted small">{activeCount}건</span>
+      <Card.Header className="bg-white">
+        <div className="d-flex justify-content-between align-items-center mb-2">
+          <strong><BsChatDots className="me-1" />댓글</strong>
+          <span className="text-muted small">{activeCount}건</span>
+        </div>
+        {isStaff && (
+          <Nav variant="tabs" className="card-header-tabs" role="tablist" style={{ marginBottom: '-0.75rem' }}>
+            <Nav.Item>
+              <Nav.Link
+                active={activeTab === 'all'}
+                onClick={() => handleTabChange('all')}
+                role="tab"
+                aria-selected={activeTab === 'all'}
+                style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', cursor: 'pointer' }}
+              >
+                전체 <Badge bg="secondary" pill style={{ fontSize: '0.65rem' }}>{activeCount}</Badge>
+              </Nav.Link>
+            </Nav.Item>
+            <Nav.Item>
+              <Nav.Link
+                active={activeTab === 'public'}
+                onClick={() => handleTabChange('public')}
+                role="tab"
+                aria-selected={activeTab === 'public'}
+                style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', cursor: 'pointer' }}
+              >
+                <BsChatLeftText className="me-1" style={{ fontSize: '0.7rem' }} />
+                댓글 <Badge bg="primary" pill style={{ fontSize: '0.65rem' }}>{publicCount}</Badge>
+              </Nav.Link>
+            </Nav.Item>
+            <Nav.Item>
+              <Nav.Link
+                active={activeTab === 'internal'}
+                onClick={() => handleTabChange('internal')}
+                role="tab"
+                aria-selected={activeTab === 'internal'}
+                style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', cursor: 'pointer' }}
+              >
+                <BsLock className="me-1" style={{ fontSize: '0.7rem' }} />
+                내부 메모 <Badge bg="warning" text="dark" pill style={{ fontSize: '0.65rem' }}>{internalCount}</Badge>
+              </Nav.Link>
+            </Nav.Item>
+          </Nav>
+        )}
       </Card.Header>
 
       <Card.Body>
@@ -343,7 +399,7 @@ export default function CommentList({ ticketId, currentUserId, currentUserRole }
               rows={3}
               value={newContent}
               onChange={(e) => setNewContent(e.target.value)}
-              placeholder="댓글을 작성해 주세요..."
+              placeholder={activeTab === 'internal' ? '내부 메모를 작성해 주세요... (고객에게 보이지 않습니다)' : '댓글을 작성해 주세요...'}
               maxLength={5000}
               disabled={submitting || uploading}
             />
@@ -420,7 +476,11 @@ export default function CommentList({ ticketId, currentUserId, currentUserRole }
                   id="internal-comment-switch"
                   label={<span className="small"><BsLock className="me-1" />내부 메모</span>}
                   checked={isInternal}
-                  onChange={(e) => setIsInternal(e.target.checked)}
+                  onChange={(e) => {
+                    setIsInternal(e.target.checked);
+                    if (e.target.checked) setActiveTab('internal');
+                    else if (activeTab === 'internal') setActiveTab('all');
+                  }}
                   disabled={submitting || uploading}
                 />
               )}
@@ -446,11 +506,15 @@ export default function CommentList({ ticketId, currentUserId, currentUserRole }
         {/* ── 댓글 목록 (최신순) ── */}
         {loading ? (
           <div className="text-center py-3"><Spinner animation="border" size="sm" /></div>
-        ) : comments.length === 0 ? (
-          <p className="text-muted text-center mb-0">등록된 댓글이 없습니다.</p>
+        ) : filteredComments.length === 0 ? (
+          <p className="text-muted text-center mb-0">
+            {activeTab === 'all' ? '등록된 댓글이 없습니다.' :
+             activeTab === 'public' ? '등록된 댓글이 없습니다.' :
+             '등록된 내부 메모가 없습니다.'}
+          </p>
         ) : (
           <div className="d-flex flex-column" style={{ gap: 12 }}>
-            {comments.map((c) => {
+            {filteredComments.map((c) => {
               const internal = c.type === 'INTERNAL';
               const isEditing = editingId === c.id;
               const isMine = c.author.id === currentUserId;

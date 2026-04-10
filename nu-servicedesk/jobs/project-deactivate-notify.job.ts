@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { getNextBusinessDayStart } from '@/lib/business-hours';
 import { createNotificationsForUsers } from '@/lib/notification-helper';
-import { getHolidays } from './auto-receive.job';
+import { getHolidays } from '@/lib/holidays';
 
 /**
  * project-deactivate-notify: Daily 00:00 KST

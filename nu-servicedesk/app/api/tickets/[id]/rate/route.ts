@@ -94,12 +94,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
 
       // Transition ticket to CLOSED via optimistic locking
-      const result = await tx.$queryRaw<any[]>`
+      const result = await tx.$queryRaw<{ id: string }[]>`
         UPDATE tickets
         SET status = 'CLOSED'::"TicketStatus",
             updated_at = NOW()
         WHERE id = ${id} AND status = 'SATISFACTION_PENDING'::"TicketStatus"
-        RETURNING *
+        RETURNING id
       `;
 
       if (result.length === 0) {

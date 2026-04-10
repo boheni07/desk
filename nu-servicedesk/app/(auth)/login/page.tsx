@@ -48,12 +48,12 @@ export default function LoginPage() {
 
       // Check if password change is required
       if (result.data?.mustChangePassword) {
-        router.push('/change-password');
+        router.replace('/change-password');
         return;
       }
 
-      // Successful login — redirect to dashboard
-      router.push('/dashboard');
+      // Successful login — redirect to dashboard (replace to prevent back-to-login)
+      router.replace('/dashboard');
     } catch {
       setError('서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.');
     } finally {

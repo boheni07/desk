@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { getBusinessHoursBetween } from '@/lib/business-hours';
 import { BUSINESS_RULES } from '@/lib/constants';
 import { createNotification, getTicketAssigneeIds } from '@/lib/notification-helper';
+import { getHolidays } from '@/lib/holidays';
 
 /**
  * auto-receive: Every 1 min
@@ -36,32 +37,34 @@ export async function processAutoReceive(_job: Job): Promise<void> {
       continue;
     }
 
-    // Optimistic lock: atomic UPDATE with status check
-    const result = await prisma.$queryRaw<any[]>`
-      UPDATE tickets
-      SET status = 'RECEIVED'::"TicketStatus",
-          received_at = NOW(),
-          updated_at = NOW()
-      WHERE id = ${ticket.id} AND status = 'REGISTERED'::"TicketStatus"
-      RETURNING id
-    `;
+    // Atomic: optimistic lock UPDATE + status history in single transaction
+    const transitioned = await prisma.$transaction(async (tx) => {
+      const result = await tx.$queryRaw<{ id: string }[]>`
+        UPDATE tickets
+        SET status = 'RECEIVED'::"TicketStatus",
+            received_at = NOW(),
+            updated_at = NOW()
+        WHERE id = ${ticket.id} AND status = 'REGISTERED'::"TicketStatus"
+        RETURNING id
+      `;
 
-    if (result.length === 0) {
-      // Already transitioned by someone else -- skip
-      continue;
-    }
+      if (result.length === 0) return false;
 
-    // Record status history
-    await prisma.ticketStatusHistory.create({
-      data: {
-        ticketId: ticket.id,
-        previousStatus: 'REGISTERED',
-        newStatus: 'RECEIVED',
-        actorId: null,
-        actorType: 'SYSTEM',
-        reason: `자동접수 (${BUSINESS_RULES.AUTO_RECEIVE_HOURS}근무시간 경과)`,
-      },
+      await tx.ticketStatusHistory.create({
+        data: {
+          ticketId: ticket.id,
+          previousStatus: 'REGISTERED',
+          newStatus: 'RECEIVED',
+          actorId: null,
+          actorType: 'SYSTEM',
+          reason: `자동접수 (${BUSINESS_RULES.AUTO_RECEIVE_HOURS}근무시간 경과)`,
+        },
+      });
+
+      return true;
     });
+
+    if (!transitioned) continue;
 
     // Notify assignees (if any)
     const assigneeIds = await getTicketAssigneeIds(ticket.id);
@@ -83,15 +86,4 @@ export async function processAutoReceive(_job: Job): Promise<void> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Shared holiday helper (used across multiple jobs)
-// ---------------------------------------------------------------------------
-
-export async function getHolidays(): Promise<Date[]> {
-  const currentYear = new Date().getFullYear();
-  const holidays = await prisma.holiday.findMany({
-    where: { year: { in: [currentYear - 1, currentYear, currentYear + 1] } },
-    select: { date: true },
-  });
-  return holidays.map((h) => h.date);
-}
+// Holiday helper moved to lib/holidays.ts (shared single source of truth)

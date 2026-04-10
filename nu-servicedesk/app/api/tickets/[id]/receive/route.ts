@@ -68,29 +68,57 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Optimistic locking: atomic UPDATE with status check
+    // Atomic: optimistic lock UPDATE + status history + assignment in single transaction
     // Design Ref: §5.2 — $queryRaw RETURNING * pattern
-    const result = deadlineValue
-      ? await prisma.$queryRaw<any[]>`
-          UPDATE tickets
-          SET status = 'RECEIVED'::"TicketStatus",
-              received_at = NOW(),
-              deadline = ${deadlineValue},
-              expected_completion_date = ${deadlineValue},
-              updated_at = NOW()
-          WHERE id = ${id} AND status = 'REGISTERED'::"TicketStatus"
-          RETURNING *
-        `
-      : await prisma.$queryRaw<any[]>`
-          UPDATE tickets
-          SET status = 'RECEIVED'::"TicketStatus",
-              received_at = NOW(),
-              updated_at = NOW()
-          WHERE id = ${id} AND status = 'REGISTERED'::"TicketStatus"
-          RETURNING *
-        `;
+    const txResult = await prisma.$transaction(async (tx) => {
+      const result = deadlineValue
+        ? await tx.$queryRaw<{ id: string }[]>`
+            UPDATE tickets
+            SET status = 'RECEIVED'::"TicketStatus",
+                received_at = NOW(),
+                deadline = ${deadlineValue},
+                expected_completion_date = ${deadlineValue},
+                updated_at = NOW()
+            WHERE id = ${id} AND status = 'REGISTERED'::"TicketStatus"
+            RETURNING id
+          `
+        : await tx.$queryRaw<{ id: string }[]>`
+            UPDATE tickets
+            SET status = 'RECEIVED'::"TicketStatus",
+                received_at = NOW(),
+                updated_at = NOW()
+            WHERE id = ${id} AND status = 'REGISTERED'::"TicketStatus"
+            RETURNING id
+          `;
 
-    if (result.length === 0) {
+      if (result.length === 0) return null;
+
+      await tx.ticketStatusHistory.create({
+        data: {
+          ticketId: id,
+          previousStatus: 'REGISTERED',
+          newStatus: 'RECEIVED',
+          actorId: session.userId,
+          actorType: 'USER',
+          reason: '수동접수',
+        },
+      });
+
+      await tx.ticketAssignment.upsert({
+        where: {
+          ticketId_userId: { ticketId: id, userId: session.userId },
+        },
+        update: {},
+        create: {
+          ticketId: id,
+          userId: session.userId,
+        },
+      });
+
+      return result;
+    });
+
+    if (!txResult) {
       // Check current state
       const ticket = await prisma.ticket.findUnique({
         where: { id },
@@ -105,7 +133,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       if (ticket.status === 'RECEIVED' || ticket.status === 'IN_PROGRESS') {
-        // Already received — idempotent
         const err = ERRORS.TICKET_ALREADY_RECEIVED();
         return NextResponse.json(err.toResponse(), { status: err.status });
       }
@@ -115,31 +142,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { status: 409 },
       );
     }
-
-    // Record status history and assignment in transaction
-    await prisma.$transaction([
-      prisma.ticketStatusHistory.create({
-        data: {
-          ticketId: id,
-          previousStatus: 'REGISTERED',
-          newStatus: 'RECEIVED',
-          actorId: session.userId,
-          actorType: 'USER',
-          reason: '수동접수',
-        },
-      }),
-      // Assign current user as handler
-      prisma.ticketAssignment.upsert({
-        where: {
-          ticketId_userId: { ticketId: id, userId: session.userId },
-        },
-        update: {},
-        create: {
-          ticketId: id,
-          userId: session.userId,
-        },
-      }),
-    ]);
 
     // Return updated ticket
     const ticket = await prisma.ticket.findUnique({

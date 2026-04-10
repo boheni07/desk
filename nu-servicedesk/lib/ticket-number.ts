@@ -69,6 +69,9 @@ async function generateTicketNumberFromDB(year: number): Promise<string> {
     RETURNING last_number
   `;
 
+  if (!result[0]) {
+    throw new Error('Failed to generate ticket number: empty result from DB sequence');
+  }
   const seq = result[0].last_number;
   return formatTicketNumber(year, seq);
 }

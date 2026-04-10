@@ -21,31 +21,17 @@ import {
 import CommentList from '@/components/tickets/comment-list';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PriorityBadge } from '@/components/ui/priority-badge';
+import {
+  TICKET_STATUS_LABELS as STATUS_LABELS,
+  TICKET_STATUS_COLORS as STATUS_COLORS,
+  TICKET_PRIORITY_LABELS as PRIORITY_LABELS,
+  TICKET_PRIORITY_COLORS as PRIORITY_COLORS,
+} from '@/lib/ticket-constants';
 import type { TicketStatus, TicketPriority } from '@prisma/client';
 
 // ─────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────
-
-const STATUS_LABELS: Record<string, string> = {
-  REGISTERED: '등록', RECEIVED: '접수', IN_PROGRESS: '처리중', DELAYED: '지연',
-  EXTEND_REQUESTED: '연기요청', COMPLETE_REQUESTED: '완료요청',
-  SATISFACTION_PENDING: '만족도대기', CLOSED: '종료', CANCELLED: '취소',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  REGISTERED: 'warning', RECEIVED: 'info', IN_PROGRESS: 'success', DELAYED: 'danger',
-  EXTEND_REQUESTED: 'secondary', COMPLETE_REQUESTED: 'primary',
-  SATISFACTION_PENDING: 'dark', CLOSED: 'dark', CANCELLED: 'secondary',
-};
-
-const PRIORITY_LABELS: Record<string, string> = {
-  URGENT: '긴급', HIGH: '높음', NORMAL: '보통', LOW: '낮음',
-};
-
-const PRIORITY_COLORS: Record<string, string> = {
-  URGENT: 'danger', HIGH: 'warning', NORMAL: 'info', LOW: 'secondary',
-};
 
 const APPROVAL_LABELS: Record<string, string> = {
   PENDING: '대기', APPROVED: '승인', REJECTED: '반려',
@@ -769,7 +755,7 @@ export default function TicketDetailPage() {
                       {/* Timeline dot */}
                       <div className="position-relative flex-shrink-0" style={{ width: 0 }}>
                         <div
-                          className={`position-absolute rounded-circle bg-${STATUS_COLORS[h.newStatus] || 'secondary'}`}
+                          className={`position-absolute rounded-circle bg-${STATUS_COLORS[h.newStatus as TicketStatus] || 'secondary'}`}
                           style={{
                             left: '-0.85rem',
                             top: '0.15rem',
@@ -781,12 +767,12 @@ export default function TicketDetailPage() {
                       </div>
                       <div className="flex-grow-1 ms-2">
                         <div className="d-flex align-items-center gap-1">
-                          <span className={`badge bg-${STATUS_COLORS[h.previousStatus] || 'secondary'}`} style={{ fontSize: '0.6rem', opacity: 0.7 }}>
-                            {STATUS_LABELS[h.previousStatus] || h.previousStatus}
+                          <span className={`badge bg-${STATUS_COLORS[h.previousStatus as TicketStatus] || 'secondary'}`} style={{ fontSize: '0.6rem', opacity: 0.7 }}>
+                            {STATUS_LABELS[h.previousStatus as TicketStatus] || h.previousStatus}
                           </span>
                           <span className="text-muted" style={{ fontSize: '0.65rem' }}>→</span>
-                          <span className={`badge bg-${STATUS_COLORS[h.newStatus] || 'secondary'}`} style={{ fontSize: '0.6rem' }}>
-                            {STATUS_LABELS[h.newStatus] || h.newStatus}
+                          <span className={`badge bg-${STATUS_COLORS[h.newStatus as TicketStatus] || 'secondary'}`} style={{ fontSize: '0.6rem' }}>
+                            {STATUS_LABELS[h.newStatus as TicketStatus] || h.newStatus}
                           </span>
                           <span className="text-muted" style={{ fontSize: '0.65rem', marginLeft: 'auto' }}>
                             {formatDateTime(h.createdAt)}

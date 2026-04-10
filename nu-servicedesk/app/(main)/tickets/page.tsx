@@ -3,8 +3,9 @@
 // Design Ref: §10 -- Ticket list page (Module 9B: advanced filters, sorting, URL state)
 // Plan SC: FR-22 티켓 목록 고급 필터, 정렬, URL 상태 동기화
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import Container from 'react-bootstrap/Container';
 import Button from 'react-bootstrap/Button';
 import Spinner from 'react-bootstrap/Spinner';
@@ -18,49 +19,17 @@ import Collapse from 'react-bootstrap/Collapse';
 import { BsSearch, BsPlus, BsFunnel, BsArrowUp, BsArrowDown, BsXCircle, BsCheck, BsTicketDetailedFill } from 'react-icons/bs';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PriorityBadge } from '@/components/ui/priority-badge';
+import {
+  TICKET_STATUS_LABELS as STATUS_LABELS,
+  TICKET_STATUS_COLORS as STATUS_COLORS,
+  TICKET_PRIORITY_LABELS as PRIORITY_LABELS,
+  TICKET_PRIORITY_COLORS as PRIORITY_COLORS,
+} from '@/lib/ticket-constants';
 import type { TicketStatus, TicketPriority } from '@prisma/client';
 
 // ─────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────
-
-const STATUS_LABELS: Record<string, string> = {
-  REGISTERED: '등록',
-  RECEIVED: '접수',
-  IN_PROGRESS: '처리중',
-  DELAYED: '지연',
-  EXTEND_REQUESTED: '연기요청',
-  COMPLETE_REQUESTED: '완료요청',
-  SATISFACTION_PENDING: '만족도대기',
-  CLOSED: '종료',
-  CANCELLED: '취소',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  REGISTERED: 'warning',
-  RECEIVED: 'info',
-  IN_PROGRESS: 'success',
-  DELAYED: 'danger',
-  EXTEND_REQUESTED: 'secondary',
-  COMPLETE_REQUESTED: 'primary',
-  SATISFACTION_PENDING: 'dark',
-  CLOSED: 'dark',
-  CANCELLED: 'secondary',
-};
-
-const PRIORITY_LABELS: Record<string, string> = {
-  URGENT: '긴급',
-  HIGH: '높음',
-  NORMAL: '보통',
-  LOW: '낮음',
-};
-
-const PRIORITY_COLORS: Record<string, string> = {
-  URGENT: 'danger',
-  HIGH: 'warning',
-  NORMAL: 'info',
-  LOW: 'secondary',
-};
 
 const SORT_OPTIONS = [
   { value: 'createdAt', label: '등록일' },
@@ -141,20 +110,20 @@ export default function TicketsPage() {
 
   const limit = 20;
 
-  // Sync filter state to URL
-  const updateUrl = useCallback((overrides?: Record<string, string | number>) => {
+  // Sync filter state to URL (router ref to avoid re-render loop)
+  const routerRef = useRef(router);
+  routerRef.current = router;
+
+  const updateUrl = useCallback(() => {
     const params = new URLSearchParams();
     const state = {
-      page: overrides?.page ?? page,
-      search: overrides?.search ?? search,
-      status: overrides?.status ?? filterStatuses.join(','),
-      priority: overrides?.priority ?? filterPriorities.join(','),
-      projectId: overrides?.projectId ?? filterProject,
-      assigneeId: overrides?.assigneeId ?? filterAssignee,
-      createdFrom: overrides?.createdFrom ?? createdFrom,
-      createdTo: overrides?.createdTo ?? createdTo,
-      sortBy: overrides?.sortBy ?? sortBy,
-      sortOrder: overrides?.sortOrder ?? sortOrder,
+      page, search,
+      status: filterStatuses.join(','),
+      priority: filterPriorities.join(','),
+      projectId: filterProject,
+      assigneeId: filterAssignee,
+      createdFrom, createdTo,
+      sortBy, sortOrder,
     };
 
     Object.entries(state).forEach(([key, value]) => {
@@ -164,8 +133,8 @@ export default function TicketsPage() {
     });
 
     const qs = params.toString();
-    router.replace(qs ? `/tickets?${qs}` : '/tickets', { scroll: false });
-  }, [page, search, filterStatuses, filterPriorities, filterProject, filterAssignee, createdFrom, createdTo, sortBy, sortOrder, router]);
+    routerRef.current.replace(qs ? `/tickets?${qs}` : '/tickets', { scroll: false });
+  }, [page, search, filterStatuses, filterPriorities, filterProject, filterAssignee, createdFrom, createdTo, sortBy, sortOrder]);
 
   const fetchSession = useCallback(async () => {
     try {
@@ -226,12 +195,7 @@ export default function TicketsPage() {
   }, [page, search, filterStatuses, filterPriorities, filterProject, filterAssignee, createdFrom, createdTo, sortBy, sortOrder]);
 
   useEffect(() => { fetchSession(); fetchProjects(); fetchSupportUsers(); }, [fetchSession, fetchProjects, fetchSupportUsers]);
-  useEffect(() => { fetchTickets(); }, [fetchTickets]);
-
-  // Sync URL when filters change
-  useEffect(() => {
-    updateUrl();
-  }, [page, search, filterStatuses, filterPriorities, filterProject, filterAssignee, createdFrom, createdTo, sortBy, sortOrder]);
+  useEffect(() => { fetchTickets(); updateUrl(); }, [fetchTickets, updateUrl]);
 
   const totalPages = Math.ceil(total / limit);
 
@@ -523,6 +487,10 @@ export default function TicketsPage() {
                       className="text-center"
                       style={{ width: 100, cursor: 'pointer' }}
                       onClick={() => handleSort('priority')}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSort('priority')}
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'priority' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
                     >
                       우선순위{getSortIcon('priority')}
                     </th>
@@ -531,12 +499,20 @@ export default function TicketsPage() {
                     <th
                       style={{ width: 110, cursor: 'pointer' }}
                       onClick={() => handleSort('deadline')}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSort('deadline')}
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'deadline' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
                     >
                       처리기한{getSortIcon('deadline')}
                     </th>
                     <th
                       style={{ width: 100, cursor: 'pointer' }}
                       onClick={() => handleSort('createdAt')}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSort('createdAt')}
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'createdAt' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
                     >
                       등록일{getSortIcon('createdAt')}
                     </th>
@@ -549,9 +525,9 @@ export default function TicketsPage() {
                         <span className="ticket-number">{t.ticketNumber}</span>
                       </td>
                       <td>
-                        <a href={`/tickets/${t.id}`} className="text-decoration-none fw-semibold" style={{ color: 'var(--text-primary)' }}>
+                        <Link href={`/tickets/${t.id}`} className="text-decoration-none fw-semibold" style={{ color: 'var(--text-primary)' }}>
                           {t.title}
-                        </a>
+                        </Link>
                       </td>
                       <td className="text-center">
                         <StatusBadge status={t.status as TicketStatus} size="sm" />

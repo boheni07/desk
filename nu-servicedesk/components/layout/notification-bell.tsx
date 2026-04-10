@@ -3,13 +3,15 @@
 // Design Ref: §10.2 -- Notification Bell (dropdown + push toggle)
 // Plan SC: FR-23 알림 벨, 30초 폴링, 최근 5건 표시
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import Dropdown from 'react-bootstrap/Dropdown';
 import Badge from 'react-bootstrap/Badge';
 import Spinner from 'react-bootstrap/Spinner';
 import { BsBellFill, BsBellSlashFill, BsCheckAll } from 'react-icons/bs';
 import { usePushSubscription } from '@/hooks/use-push-subscription';
+import { useUnreadCount } from '@/hooks/use-unread-count';
 import { NOTIFICATION_TYPE_LABELS } from '@/lib/notification-icons';
 import type { NotificationType } from '@prisma/client';
 
@@ -24,30 +26,15 @@ interface NotificationItem {
   ticket?: { id: string; ticketNumber: string; title: string } | null;
 }
 
-const POLL_INTERVAL = 30_000; // 30 seconds
 const MAX_DROPDOWN_ITEMS = 5;
 
 export default function NotificationBell() {
   const router = useRouter();
-  const [unreadCount, setUnreadCount] = useState(0);
+  const { unreadCount, refreshUnreadCount } = useUnreadCount();
   const [recentNotifications, setRecentNotifications] = useState<NotificationItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
-  const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const { isSupported, isSubscribed, subscribe, unsubscribe, isLoading: pushLoading } = usePushSubscription();
-
-  // Fetch unread count
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      const res = await fetch('/api/notifications/unread-count');
-      if (res.ok) {
-        const json = await res.json();
-        setUnreadCount(json.data?.count ?? json.count ?? 0);
-      }
-    } catch {
-      // Silently ignore polling errors
-    }
-  }, []);
 
   // Fetch recent unread notifications for dropdown
   const fetchRecent = useCallback(async () => {
@@ -62,16 +49,6 @@ export default function NotificationBell() {
     }
   }, []);
 
-  // Start polling on mount
-  useEffect(() => {
-    fetchUnreadCount();
-
-    pollTimerRef.current = setInterval(fetchUnreadCount, POLL_INTERVAL);
-    return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-    };
-  }, [fetchUnreadCount]);
-
   // Fetch recent when dropdown opens
   useEffect(() => {
     if (isOpen) {
@@ -85,7 +62,7 @@ export default function NotificationBell() {
     try {
       const res = await fetch('/api/notifications/read-all', { method: 'POST' });
       if (res.ok) {
-        setUnreadCount(0);
+        refreshUnreadCount();
         setRecentNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       }
     } finally {
@@ -98,7 +75,7 @@ export default function NotificationBell() {
     // Mark as read
     if (!notification.isRead) {
       await fetch(`/api/notifications/${notification.id}/read`, { method: 'POST' });
-      setUnreadCount((c) => Math.max(0, c - 1));
+      refreshUnreadCount();
     }
 
     setIsOpen(false);
@@ -172,6 +149,7 @@ export default function NotificationBell() {
               onClick={handleMarkAllRead}
               disabled={isMarkingAll || unreadCount === 0}
               title="모두 읽음"
+              aria-label="모든 알림을 읽음 처리"
             >
               {isMarkingAll ? (
                 <Spinner animation="border" size="sm" />
@@ -187,6 +165,7 @@ export default function NotificationBell() {
                 onClick={handlePushToggle}
                 disabled={pushLoading}
                 title={isSubscribed ? '푸시 알림 끄기' : '푸시 알림 켜기'}
+                aria-label={isSubscribed ? '푸시 알림 끄기' : '푸시 알림 켜기'}
               >
                 {pushLoading ? (
                   <Spinner animation="border" size="sm" />
@@ -238,6 +217,7 @@ export default function NotificationBell() {
 
         {/* Footer */}
         <Dropdown.Item
+          as={Link}
           href="/notifications"
           className="text-center text-primary fw-semibold py-2"
         >

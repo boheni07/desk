@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger';
 import { ERRORS } from '@/lib/errors';
 import { BUSINESS_RULES } from '@/lib/constants';
 import { addBusinessDays } from '@/lib/business-hours';
+import { getHolidays } from '@/lib/holidays';
 import { createNotification } from '@/lib/notification-helper';
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -46,34 +47,51 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const isFromDelayed = currentTicket?.status === 'DELAYED';
 
-    // Optimistic locking: try to transition from RECEIVED or DELAYED to IN_PROGRESS
-    // When transitioning from DELAYED, extend deadline by +5 business days from now
-    // to prevent delay-detect batch from immediately reverting to DELAYED
-    const result = isFromDelayed
-      ? await (async () => {
-          const holidays = await prisma.holiday.findMany({ select: { date: true } });
-          const holidayDates = holidays.map(h => h.date);
-          const newDeadline = addBusinessDays(new Date(), BUSINESS_RULES.DESIRED_DATE_DEFAULT_DAYS, holidayDates);
-          return prisma.$queryRaw<any[]>`
-            UPDATE tickets
-            SET status = 'IN_PROGRESS'::"TicketStatus",
-                deadline = ${newDeadline},
-                expected_completion_date = ${newDeadline},
-                updated_at = NOW()
-            WHERE id = ${id} AND status = 'DELAYED'::"TicketStatus"
-            RETURNING *
-          `;
-        })()
-      : await prisma.$queryRaw<any[]>`
+    // Atomic: optimistic lock UPDATE + status history in single transaction
+    const prevStatus = isFromDelayed ? 'DELAYED' as const : 'RECEIVED' as const;
+
+    const txResult = await prisma.$transaction(async (tx) => {
+      let result: { id: string }[];
+
+      if (isFromDelayed) {
+        const holidayDates = await getHolidays();
+        const newDeadline = addBusinessDays(new Date(), BUSINESS_RULES.DESIRED_DATE_DEFAULT_DAYS, holidayDates);
+        result = await tx.$queryRaw<{ id: string }[]>`
+          UPDATE tickets
+          SET status = 'IN_PROGRESS'::"TicketStatus",
+              deadline = ${newDeadline},
+              expected_completion_date = ${newDeadline},
+              updated_at = NOW()
+          WHERE id = ${id} AND status = 'DELAYED'::"TicketStatus"
+          RETURNING id
+        `;
+      } else {
+        result = await tx.$queryRaw<{ id: string }[]>`
           UPDATE tickets
           SET status = 'IN_PROGRESS'::"TicketStatus",
               updated_at = NOW()
           WHERE id = ${id} AND status = 'RECEIVED'::"TicketStatus"
-          RETURNING *
+          RETURNING id
         `;
+      }
 
-    if (result.length === 0) {
-      // Conflict — check current state for appropriate response
+      if (result.length === 0) return null;
+
+      await tx.ticketStatusHistory.create({
+        data: {
+          ticketId: id,
+          previousStatus: prevStatus,
+          newStatus: 'IN_PROGRESS',
+          actorId: session.userId,
+          actorType: 'USER',
+          reason: isFromDelayed ? '지연 상태에서 처리 재개 (처리기한 자동 연장)' : '처리 시작',
+        },
+      });
+
+      return result;
+    });
+
+    if (!txResult) {
       const ticket = await prisma.ticket.findUnique({
         where: { id },
         select: { status: true },
@@ -86,7 +104,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      // Already IN_PROGRESS -> 204 idempotent
       if (ticket.status === 'IN_PROGRESS') {
         return new NextResponse(null, { status: 204 });
       }
@@ -96,21 +113,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { status: 409 },
       );
     }
-
-    // Determine the previous status
-    const prevStatus = isFromDelayed ? 'DELAYED' : 'RECEIVED';
-
-    // Record status history
-    await prisma.ticketStatusHistory.create({
-      data: {
-        ticketId: id,
-        previousStatus: prevStatus,
-        newStatus: 'IN_PROGRESS',
-        actorId: session.userId,
-        actorType: 'USER',
-        reason: isFromDelayed ? '지연 상태에서 처리 재개 (처리기한 자동 연장)' : '처리 시작',
-      },
-    });
 
     const ticket = await prisma.ticket.findUnique({
       where: { id },

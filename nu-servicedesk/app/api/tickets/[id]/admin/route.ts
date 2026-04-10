@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/session';
 import { logger } from '@/lib/logger';
+import type { TicketStatus } from '@prisma/client';
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -156,8 +157,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         await tx.ticketStatusHistory.create({
           data: {
             ticketId: id,
-            previousStatus: previousValue as any,
-            newStatus: value as any,
+            previousStatus: previousValue as TicketStatus,
+            newStatus: value as TicketStatus,
             actorId: session.userId,
             actorType: 'USER',
             reason: `관리자 직접 변경: ${reason}`,

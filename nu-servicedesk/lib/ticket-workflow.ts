@@ -7,6 +7,7 @@ import { canTransition, getNextStatus } from '@/lib/ticket-state-machine';
 import { TICKET_EVENTS } from '@/lib/ticket-constants';
 import { BUSINESS_RULES } from '@/lib/constants';
 import { addBusinessDays, getBusinessHoursBetween } from '@/lib/business-hours';
+import { getHolidays } from '@/lib/holidays';
 import { ERRORS, BusinessError } from '@/lib/errors';
 import {
   createNotification,
@@ -58,17 +59,11 @@ export async function requestExtend(
     throw new BusinessError('INVALID_STATUS', 422, check.reason || '현재 상태에서 연기요청할 수 없습니다.');
   }
 
-  // Check if extend already used (unique constraint on ticketId with isDeleted check)
-  const existingExtend = await prisma.extendRequest.findFirst({
-    where: { ticketId, isDeleted: false, status: { in: ['PENDING', 'APPROVED'] } },
-  });
-  if (existingExtend) {
-    throw ERRORS.EXTEND_ALREADY_USED();
-  }
+  // Pre-compute holidays once (avoid duplicate DB call)
+  const holidays = await getHolidays();
 
   // Check extend deadline buffer (must request before deadline - 8 business hours)
   if (ticket.deadline) {
-    const holidays = await getHolidaysForWorkflow();
     const hoursUntilDeadline = getBusinessHoursBetween(new Date(), ticket.deadline, holidays);
     if (hoursUntilDeadline < BUSINESS_RULES.EXTEND_DEADLINE_BUFFER_HOURS) {
       throw ERRORS.EXTEND_DEADLINE_PASSED();
@@ -76,12 +71,19 @@ export async function requestExtend(
   }
 
   // Calculate new deadline: current deadline + requestedDays business days
-  const holidays = await getHolidaysForWorkflow();
   const baseDeadline = ticket.deadline ?? new Date();
   const newDeadline = addBusinessDays(baseDeadline, params.requestedDays, holidays);
 
-  // Transaction: create ExtendRequest + transition ticket
+  // Transaction: duplicate check + create ExtendRequest + transition ticket
+  // findFirst inside tx to prevent TOCTOU race condition
   const extendRequest = await prisma.$transaction(async (tx) => {
+    const existingExtend = await tx.extendRequest.findFirst({
+      where: { ticketId, isDeleted: false, status: { in: ['PENDING', 'APPROVED'] } },
+    });
+    if (existingExtend) {
+      throw ERRORS.EXTEND_ALREADY_USED();
+    }
+
     const er = await tx.extendRequest.create({
       data: {
         ticketId,
@@ -92,8 +94,8 @@ export async function requestExtend(
       },
     });
 
-    // Transition ticket to EXTEND_REQUESTED
-    await tx.$queryRaw`
+    // Transition ticket to EXTEND_REQUESTED (optimistic lock)
+    const extResult = await tx.$queryRaw<{ id: string }[]>`
       UPDATE tickets
       SET status = 'EXTEND_REQUESTED'::"TicketStatus",
           updated_at = NOW()
@@ -101,6 +103,9 @@ export async function requestExtend(
         AND status = ${ticket.status}::"TicketStatus"
       RETURNING id
     `;
+    if (extResult.length === 0) {
+      throw new BusinessError('CONFLICT', 409, '티켓 상태가 변경되었습니다. 다시 시도해주세요.');
+    }
 
     await tx.ticketStatusHistory.create({
       data: {
@@ -187,8 +192,8 @@ export async function approveExtend(
       },
     });
 
-    // Update ticket deadline
-    await tx.$queryRaw`
+    // Update ticket deadline (optimistic lock)
+    const apvResult = await tx.$queryRaw<{ id: string }[]>`
       UPDATE tickets
       SET deadline = ${er.newDeadline},
           status = 'IN_PROGRESS'::"TicketStatus",
@@ -197,6 +202,9 @@ export async function approveExtend(
         AND status = 'EXTEND_REQUESTED'::"TicketStatus"
       RETURNING id
     `;
+    if (apvResult.length === 0) {
+      throw new BusinessError('CONFLICT', 409, '티켓 상태가 변경되었습니다. 다시 시도해주세요.');
+    }
 
     // Record deadline history
     await tx.ticketDeadlineHistory.create({
@@ -293,7 +301,7 @@ export async function rejectExtend(
       },
     });
 
-    await tx.$queryRaw`
+    const rejResult = await tx.$queryRaw<{ id: string }[]>`
       UPDATE tickets
       SET status = ${returnStatus}::"TicketStatus",
           updated_at = NOW()
@@ -301,6 +309,9 @@ export async function rejectExtend(
         AND status = 'EXTEND_REQUESTED'::"TicketStatus"
       RETURNING id
     `;
+    if (rejResult.length === 0) {
+      throw new BusinessError('CONFLICT', 409, '티켓 상태가 변경되었습니다. 다시 시도해주세요.');
+    }
 
     await tx.ticketStatusHistory.create({
       data: {
@@ -375,7 +386,7 @@ export async function requestComplete(
       },
     });
 
-    await tx.$queryRaw`
+    const crResult = await tx.$queryRaw<{ id: string }[]>`
       UPDATE tickets
       SET status = 'COMPLETE_REQUESTED'::"TicketStatus",
           complete_request_count = ${attemptNumber},
@@ -384,6 +395,9 @@ export async function requestComplete(
         AND status = ${ticket.status}::"TicketStatus"
       RETURNING id
     `;
+    if (crResult.length === 0) {
+      throw new BusinessError('CONFLICT', 409, '티켓 상태가 변경되었습니다. 다시 시도해주세요.');
+    }
 
     await tx.ticketStatusHistory.create({
       data: {
@@ -475,7 +489,7 @@ export async function approveComplete(
       },
     });
 
-    await tx.$queryRaw`
+    const acResult = await tx.$queryRaw<{ id: string }[]>`
       UPDATE tickets
       SET status = ${targetStatus}::"TicketStatus",
           updated_at = NOW()
@@ -483,6 +497,9 @@ export async function approveComplete(
         AND status = 'COMPLETE_REQUESTED'::"TicketStatus"
       RETURNING id
     `;
+    if (acResult.length === 0) {
+      throw new BusinessError('CONFLICT', 409, '티켓 상태가 변경되었습니다. 다시 시도해주세요.');
+    }
 
     await tx.ticketStatusHistory.create({
       data: {
@@ -580,7 +597,7 @@ export async function rejectComplete(
       },
     });
 
-    await tx.$queryRaw`
+    const rcResult = await tx.$queryRaw<{ id: string }[]>`
       UPDATE tickets
       SET status = ${returnStatus}::"TicketStatus",
           updated_at = NOW()
@@ -588,6 +605,9 @@ export async function rejectComplete(
         AND status = 'COMPLETE_REQUESTED'::"TicketStatus"
       RETURNING id
     `;
+    if (rcResult.length === 0) {
+      throw new BusinessError('CONFLICT', 409, '티켓 상태가 변경되었습니다. 다시 시도해주세요.');
+    }
 
     await tx.ticketStatusHistory.create({
       data: {
@@ -609,7 +629,7 @@ export async function rejectComplete(
     });
     if (restoredTicket?.deadline && new Date() > restoredTicket.deadline) {
       await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`
+        const dlResult = await tx.$queryRaw<{ id: string }[]>`
           UPDATE tickets
           SET status = 'DELAYED'::"TicketStatus",
               updated_at = NOW()
@@ -617,6 +637,7 @@ export async function rejectComplete(
             AND status = ${returnStatus}::"TicketStatus"
           RETURNING id
         `;
+        if (dlResult.length === 0) return; // Already transitioned by another process
         await tx.ticketStatusHistory.create({
           data: {
             ticketId: cr.ticketId,
@@ -658,15 +679,4 @@ export async function rejectComplete(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-async function getHolidaysForWorkflow(): Promise<Date[]> {
-  const currentYear = new Date().getFullYear();
-  const holidays = await prisma.holiday.findMany({
-    where: { year: { in: [currentYear - 1, currentYear, currentYear + 1] } },
-    select: { date: true },
-  });
-  return holidays.map((h) => h.date);
-}
+// Helpers — getHolidays() moved to lib/holidays.ts (shared with batch jobs)

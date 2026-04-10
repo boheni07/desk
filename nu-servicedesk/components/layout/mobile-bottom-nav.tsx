@@ -4,7 +4,6 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
 import {
   BsSpeedometer2,
   BsTicketDetailedFill,
@@ -12,7 +11,7 @@ import {
   BsPersonFill,
   BsGearFill,
 } from 'react-icons/bs';
-import { useIsMobile } from '@/hooks/use-media-query';
+import { useUnreadCount } from '@/hooks/use-unread-count';
 import type { UserType } from '@/types/auth';
 
 interface MobileBottomNavProps {
@@ -37,30 +36,11 @@ function buildTabs(userType: UserType): TabItem[] {
 }
 
 export default function MobileBottomNav({ userType }: MobileBottomNavProps) {
-  const isMobile    = useIsMobile();
   const pathname    = usePathname();
-  const [unread, setUnread] = useState(0);
+  const { unreadCount: unread } = useUnreadCount();
   const tabs = buildTabs(userType);
 
-  useEffect(() => {
-    if (!isMobile) return;
-    let cancelled = false;
-    const fetch_ = async () => {
-      try {
-        const res = await fetch('/api/notifications/unread-count');
-        if (res.ok) {
-          const j = await res.json();
-          if (!cancelled && j.success) setUnread(j.data.count ?? 0);
-        }
-      } catch { /* ignore */ }
-    };
-    fetch_();
-    const id = setInterval(fetch_, 30_000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [isMobile]);
-
-  if (!isMobile) return null;
-
+  // Visibility controlled by CSS d-md-none (no JS conditional to avoid hydration mismatch)
   return (
     <nav
       className="itsm-bottom-nav d-md-none"

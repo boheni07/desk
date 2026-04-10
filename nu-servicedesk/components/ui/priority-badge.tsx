@@ -22,7 +22,10 @@ const PRIORITY_CSS_CLASS: Record<TicketPriority, string> = {
  */
 export function PriorityBadge({ priority }: PriorityBadgeProps) {
   return (
-    <span className={PRIORITY_CSS_CLASS[priority] ?? 'badge-priority badge-normal'}>
+    <span
+      className={PRIORITY_CSS_CLASS[priority] ?? 'badge-priority badge-normal'}
+      aria-label={`우선순위: ${TICKET_PRIORITY_LABELS[priority] ?? priority}`}
+    >
       {TICKET_PRIORITY_LABELS[priority] ?? priority}
     </span>
   );

@@ -83,8 +83,11 @@ export async function deleteFile(key: string): Promise<void> {
     await getR2().send(command);
     return;
   }
-  // Local mode
-  const filePath = path.join(LOCAL_UPLOAD_DIR, key);
+  // Local mode — defense-in-depth: validate path stays within upload dir
+  const filePath = path.resolve(LOCAL_UPLOAD_DIR, key);
+  if (!filePath.startsWith(path.resolve(LOCAL_UPLOAD_DIR))) {
+    throw new Error('Path traversal attempt detected');
+  }
   await fs.unlink(filePath).catch(() => {});
 }
 
@@ -92,7 +95,11 @@ export async function deleteFile(key: string): Promise<void> {
  * Save a file to local storage (dev only).
  */
 export async function saveLocalFile(key: string, data: Buffer): Promise<void> {
-  const filePath = path.join(LOCAL_UPLOAD_DIR, key);
+  const filePath = path.resolve(LOCAL_UPLOAD_DIR, key);
+  // Defense-in-depth: ensure resolved path stays within upload directory
+  if (!filePath.startsWith(path.resolve(LOCAL_UPLOAD_DIR))) {
+    throw new Error('Path traversal attempt detected');
+  }
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, data);
 }

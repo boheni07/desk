@@ -32,30 +32,35 @@ export async function processDelayDetect(_job: Job): Promise<void> {
   let processed = 0;
 
   for (const ticket of tickets) {
-    // Optimistic lock: only update if status hasn't changed
-    const result = await prisma.$queryRaw<any[]>`
-      UPDATE tickets
-      SET status = 'DELAYED'::"TicketStatus",
-          updated_at = NOW()
-      WHERE id = ${ticket.id}
-        AND status = ${ticket.status}::"TicketStatus"
-        AND deadline < NOW()
-      RETURNING id
-    `;
+    // Atomic: optimistic lock UPDATE + status history in single transaction
+    const transitioned = await prisma.$transaction(async (tx) => {
+      const result = await tx.$queryRaw<{ id: string }[]>`
+        UPDATE tickets
+        SET status = 'DELAYED'::"TicketStatus",
+            updated_at = NOW()
+        WHERE id = ${ticket.id}
+          AND status = ${ticket.status}::"TicketStatus"
+          AND deadline < NOW()
+        RETURNING id
+      `;
 
-    if (result.length === 0) continue;
+      if (result.length === 0) return false;
 
-    // Record status history
-    await prisma.ticketStatusHistory.create({
-      data: {
-        ticketId: ticket.id,
-        previousStatus: ticket.status,
-        newStatus: 'DELAYED',
-        actorId: null,
-        actorType: 'SYSTEM',
-        reason: '처리기한 초과로 자동 지연전환',
-      },
+      await tx.ticketStatusHistory.create({
+        data: {
+          ticketId: ticket.id,
+          previousStatus: ticket.status,
+          newStatus: 'DELAYED',
+          actorId: null,
+          actorType: 'SYSTEM',
+          reason: '처리기한 초과로 자동 지연전환',
+        },
+      });
+
+      return true;
     });
+
+    if (!transitioned) continue;
 
     // Notify assignees
     const assigneeIds = await getTicketAssigneeIds(ticket.id);

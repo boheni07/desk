@@ -1,7 +1,7 @@
 // Design Ref: §7.1 — Redis-backed server sessions + role_hint HMAC signing
 // Plan SC: SC-08 RBAC, OWASP 비밀번호 변경 시 전체 세션 폐기
 
-import { randomBytes, createHmac } from 'crypto';
+import { randomBytes, createHmac, timingSafeEqual } from 'crypto';
 import { cookies } from 'next/headers';
 import { redis } from './redis';
 import { BUSINESS_RULES } from './constants';
@@ -10,6 +10,7 @@ import type { RedisSession, UserType } from '@/types/auth';
 
 const SESSION_TTL = BUSINESS_RULES.SESSION_TTL_SECONDS; // 28800 (8 hours)
 const SESSION_PREFIX = 'session:';
+const USER_SESSIONS_PREFIX = 'user_sessions:';
 const COOKIE_SID = 'sid';
 const COOKIE_ROLE_HINT = 'role_hint';
 
@@ -24,20 +25,24 @@ function getRoleHintSecret(): string {
   if (!secret) {
     throw new Error('ROLE_HINT_SECRET environment variable is not set');
   }
+  if (secret.startsWith('change-me')) {
+    logger.warn('ROLE_HINT_SECRET is still a placeholder value — change it before deploying to production');
+  }
   return secret;
 }
 
+
 /**
- * Sign a role string with HMAC-SHA256 (truncated to 16 hex chars).
+ * Sign a role string with HMAC-SHA256 (truncated to 32 hex chars = 128 bits).
  */
 export function signRoleHint(role: string): string {
   const secret = getRoleHintSecret();
-  const signature = createHmac('sha256', secret).update(role).digest('hex').slice(0, 16);
+  const signature = createHmac('sha256', secret).update(role).digest('hex').slice(0, 32);
   return `${role}.${signature}`;
 }
 
 /**
- * Verify a role_hint cookie value.
+ * Verify a role_hint cookie value using timing-safe comparison.
  * Returns the role if valid, null otherwise.
  */
 export function verifyRoleHint(value: string): string | null {
@@ -48,9 +53,13 @@ export function verifyRoleHint(value: string): string | null {
     const role = value.slice(0, dotIndex);
     const sig = value.slice(dotIndex + 1);
     const secret = getRoleHintSecret();
-    const expected = createHmac('sha256', secret).update(role).digest('hex').slice(0, 16);
+    // Accept both 32-char (current) and 16-char (legacy) HMAC signatures
+    const fullHmac = createHmac('sha256', secret).update(role).digest('hex');
+    const expected = fullHmac.slice(0, sig.length === 16 ? 16 : 32);
 
-    return sig === expected ? role : null;
+    if (sig.length !== expected.length) return null;
+    const isValid = timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+    return isValid ? role : null;
   } catch {
     return null;
   }
@@ -97,6 +106,10 @@ export async function createSession(
     'EX',
     SESSION_TTL,
   );
+
+  // Index: track session ID per user for efficient bulk deletion
+  await redis.sadd(`${USER_SESSIONS_PREFIX}${userId}`, sessionId);
+  await redis.expire(`${USER_SESSIONS_PREFIX}${userId}`, SESSION_TTL);
 
   // Set cookies
   const cookieStore = await cookies();
@@ -161,42 +174,39 @@ export async function getSession(): Promise<(RedisSession & { sessionId: string 
  * Delete a specific session by its ID.
  */
 export async function deleteSession(sessionId: string): Promise<void> {
+  // Read session to get userId for index cleanup
+  const data = await redis.get(`${SESSION_PREFIX}${sessionId}`);
   await redis.del(`${SESSION_PREFIX}${sessionId}`);
-  logger.info({ sessionId: sessionId.slice(0, 8) + '...' }, 'Session deleted');
+  if (data) {
+    try {
+      const session: RedisSession = JSON.parse(data);
+      await redis.srem(`${USER_SESSIONS_PREFIX}${session.userId}`, sessionId);
+    } catch { /* skip if malformed */ }
+  }
+  logger.info('Session deleted');
 }
 
 /**
  * Delete all sessions for a given user.
  * Used when password is changed (OWASP requirement, V2.1 spec).
  *
- * Note: Uses SCAN instead of KEYS for production safety.
+ * Uses user_sessions:{userId} Set index for O(1) lookup instead of SCAN.
  */
 export async function deleteAllUserSessions(userId: string): Promise<number> {
-  let deleted = 0;
-  let cursor = '0';
+  const indexKey = `${USER_SESSIONS_PREFIX}${userId}`;
+  const sessionIds = await redis.smembers(indexKey);
 
-  do {
-    const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', `${SESSION_PREFIX}*`, 'COUNT', 100);
-    cursor = nextCursor;
+  if (sessionIds.length === 0) return 0;
 
-    for (const key of keys) {
-      try {
-        const data = await redis.get(key);
-        if (data) {
-          const session: RedisSession = JSON.parse(data);
-          if (session.userId === userId) {
-            await redis.del(key);
-            deleted++;
-          }
-        }
-      } catch {
-        // Skip malformed session data
-      }
-    }
-  } while (cursor !== '0');
+  const pipeline = redis.pipeline();
+  for (const sid of sessionIds) {
+    pipeline.del(`${SESSION_PREFIX}${sid}`);
+  }
+  pipeline.del(indexKey);
+  await pipeline.exec();
 
-  logger.info({ userId, deleted }, 'All user sessions deleted');
-  return deleted;
+  logger.info({ userId, deleted: sessionIds.length }, 'All user sessions deleted');
+  return sessionIds.length;
 }
 
 /**
