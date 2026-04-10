@@ -14,7 +14,7 @@
 - Database: PostgreSQL 15+ (Prisma ORM, 22개 모델) — 포트 5433
 - Cache/Queue: Redis 7+ (세션 + BullMQ 10개 배치 잡) — 포트 6379
 - Auth: 커스텀 Server Session + Redis (Sliding Expiry 8시간)
-- File: Cloudflare R2 (Presigned URL)
+- File: Cloudflare R2 (Presigned URL) / 로컬 파일 저장 fallback (R2 미설정 시)
 - Push: Web Push (VAPID)
 
 ## 핵심 규칙
@@ -76,8 +76,8 @@ npm run dev                   # http://localhost:3010
 | 역할 | 아이디 | 비밀번호 |
 |------|--------|----------|
 | 관리자 | `admin` | `Admin@1234` |
-| 지원담당자 | `sup.kim` ~ `sup.jung` | `Support@1234` |
-| 고객 | `alpha.han` ~ `gamma.moon` | `Customer@1234` |
+| 지원담당자 | `sup.kim` ~ `sup.yang` (8명) | `Support@1234` |
+| 고객 | `alpha.han` ~ `epsilon.han` (5개사 20명) | `Customer@1234` |
 
 ## 주요 파일 위치
 

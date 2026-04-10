@@ -29,14 +29,41 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    if (session.type !== 'admin') {
+    const { id } = await params;
+
+    // Fetch ticket BEFORE role check so we can verify ownership
+    const ticket = await prisma.ticket.findUnique({
+      where: { id },
+      select: { status: true, registeredById: true },
+    });
+
+    if (!ticket) {
       return NextResponse.json(
-        { success: false, error: { code: 'FORBIDDEN', message: '관리자만 티켓을 취소할 수 있습니다.', status: 403 } },
-        { status: 403 },
+        { success: false, error: { code: 'NOT_FOUND', message: '티켓을 찾을 수 없습니다.', status: 404 } },
+        { status: 404 },
       );
     }
 
-    const { id } = await params;
+    // RBAC: admin can cancel any CANCELLABLE_STATUSES ticket;
+    // support/customer can cancel only their own REGISTERED tickets
+    if (session.type === 'admin') {
+      if (!CANCELLABLE_STATUSES.includes(ticket.status)) {
+        const err = ERRORS.TICKET_CANCEL_NOT_ALLOWED();
+        return NextResponse.json(err.toResponse(), { status: err.status });
+      }
+    } else if (session.type === 'support' || session.type === 'customer') {
+      if (ticket.status !== 'REGISTERED' || ticket.registeredById !== session.userId) {
+        return NextResponse.json(
+          { success: false, error: { code: 'FORBIDDEN', message: '본인이 등록한 REGISTERED 상태의 티켓만 취소할 수 있습니다.', status: 403 } },
+          { status: 403 },
+        );
+      }
+    } else {
+      return NextResponse.json(
+        { success: false, error: { code: 'FORBIDDEN', message: '티켓을 취소할 권한이 없습니다.', status: 403 } },
+        { status: 403 },
+      );
+    }
 
     const body = await request.json();
     const parsed = cancelSchema.safeParse(body);
@@ -49,24 +76,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const { reason } = parsed.data;
-
-    // Get current ticket to check status
-    const ticket = await prisma.ticket.findUnique({
-      where: { id },
-      select: { status: true },
-    });
-
-    if (!ticket) {
-      return NextResponse.json(
-        { success: false, error: { code: 'NOT_FOUND', message: '티켓을 찾을 수 없습니다.', status: 404 } },
-        { status: 404 },
-      );
-    }
-
-    if (!CANCELLABLE_STATUSES.includes(ticket.status)) {
-      const err = ERRORS.TICKET_CANCEL_NOT_ALLOWED();
-      return NextResponse.json(err.toResponse(), { status: err.status });
-    }
 
     const previousStatus = ticket.status;
 

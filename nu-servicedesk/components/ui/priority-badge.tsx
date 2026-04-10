@@ -22,8 +22,8 @@ const PRIORITY_CSS_CLASS: Record<TicketPriority, string> = {
  */
 export function PriorityBadge({ priority }: PriorityBadgeProps) {
   return (
-    <span className={PRIORITY_CSS_CLASS[priority]}>
-      {TICKET_PRIORITY_LABELS[priority]}
+    <span className={PRIORITY_CSS_CLASS[priority] ?? 'badge-priority badge-normal'}>
+      {TICKET_PRIORITY_LABELS[priority] ?? priority}
     </span>
   );
 }

@@ -42,12 +42,6 @@ const ROLE_LABELS: Record<string, string> = {
   customer: '고객',
 };
 
-const ROLE_COLORS: Record<string, string> = {
-  admin: 'danger',
-  support: 'primary',
-  customer: 'info',
-};
-
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
@@ -300,7 +294,7 @@ export default function UsersPage() {
         </Form>
       </div>
 
-      {error && <Alert variant="danger">{error}</Alert>}
+      {error && <Alert variant="danger" dismissible onClose={() => setError('')}>{error}</Alert>}
 
       {/* Table Card */}
       <div className="table-card">
@@ -312,8 +306,8 @@ export default function UsersPage() {
         ) : users.length === 0 ? (
           <div className="empty-state">
             <BsPeopleFill className="empty-state-icon" />
-            <div className="empty-state-title">{search || filterRole || filterCompany ? '검색 결과가 없습니다' : '등록된 사용자가 없습니다'}</div>
-            <div className="empty-state-desc">{search || filterRole || filterCompany ? '다른 검색어나 필터로 시도해 보세요.' : '신규 등록 버튼을 눌러 첫 사용자를 추가하세요.'}</div>
+            <div className="empty-state-title">{search || filterRole || filterCompany || filterActive ? '검색 결과가 없습니다' : '등록된 사용자가 없습니다'}</div>
+            <div className="empty-state-desc">{search || filterRole || filterCompany || filterActive ? '다른 검색어나 필터로 시도해 보세요.' : '신규 등록 버튼을 눌러 첫 사용자를 추가하세요.'}</div>
           </div>
         ) : (
           <>

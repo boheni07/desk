@@ -26,7 +26,7 @@
 - [Design](02-design/features/nu-servicedesk.design.md) — 아키텍처, DB 스키마, API 설계
 
 ### 분석/보고 (Check/Report)
-- [Gap 분석](03-analysis/nu-servicedesk.analysis.md) — 설계 vs 구현 일치율 98.3%
+- [Gap 분석](03-analysis/nu-servicedesk.analysis.md) — 설계 vs 구현 일치율 100% (V2.2 기준) — V2.3 재측정 필요
 - [완료 보고서](04-report/nu-servicedesk.report.md) — PDCA 최종 보고서
 - [QA 검수](04-report/qa-inspection.report.md) — QA 검수 보고서
 

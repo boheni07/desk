@@ -43,7 +43,7 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   return (
-    <Modal show={show} onHide={onCancel} centered aria-labelledby="confirm-dialog-title">
+    <Modal show={show} onHide={isLoading ? undefined : onCancel} backdrop={isLoading ? 'static' : true} centered aria-labelledby="confirm-dialog-title">
       <Modal.Header closeButton>
         <Modal.Title id="confirm-dialog-title">{title}</Modal.Title>
       </Modal.Header>

@@ -602,14 +602,16 @@ if (data.isActive === false && existing.isActive === true) {
 ### 5.1 티켓 상태 전이 (9개 상태, 17개 이벤트)
 
 ```
-States:
-  PENDING → AUTO_RECEIVED → ASSIGNED → IN_PROGRESS →
-  WAITING_APPROVAL → COMPLETED → CANCELED → SATISFACTION_PENDING → CLOSED
+States (9개):
+  REGISTERED → RECEIVED → IN_PROGRESS → DELAYED →
+  EXTEND_REQUESTED → COMPLETE_REQUESTED → SATISFACTION_PENDING →
+  CLOSED → CANCELLED
 
-Events:
-  submit, auto_receive, assign, start, request_extend, approve_extend,
-  request_complete, approve_complete, reject_complete, cancel,
-  rate_satisfaction, close, etc.
+Events (15개):
+  RECEIVE, AUTO_RECEIVE, CONFIRM, DELAY_DETECT, REQUEST_EXTEND,
+  APPROVE_EXTEND, REJECT_EXTEND, AUTO_APPROVE_EXTEND, REQUEST_COMPLETE,
+  APPROVE_COMPLETE, REJECT_COMPLETE, AUTO_COMPLETE, RATE_SATISFACTION,
+  AUTO_CLOSE, CANCEL
 ```
 
 ### 5.2 REJECT_COMPLETE — previousStatus 기반 복귀
@@ -984,6 +986,13 @@ text/plain
 - 업로드 UI 숨김 (`readOnly` prop으로 조건 렌더링)
 - 파일 다운로드만 허용 (GET /api/attachments/[id] → presigned 다운로드 URL)
 - 첨부파일 없을 경우: "첨부파일이 없습니다." 빈 상태 메시지 표시
+
+#### 10.3 로컬 파일 저장 Fallback (개발 환경)
+
+R2 환경변수(`R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`) 미설정 시 자동으로 로컬 파일 시스템(`public/uploads/`)에 저장.
+- 업로드 URL: `/api/attachments/local-upload?key={r2Key}` (PUT)
+- 다운로드 URL: `/uploads/{r2Key}` (Next.js 정적 서빙)
+- 프로덕션 환경에서는 반드시 R2 설정 필요
 
 ---
 

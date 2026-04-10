@@ -3,7 +3,7 @@
 // Design Ref: §6 -- Push subscription management hook
 // Plan SC: FR-23 Web Push registration/unregistration
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface UsePushSubscriptionReturn {
   isSupported: boolean;
@@ -42,15 +42,20 @@ export function usePushSubscription(): UsePushSubscriptionReturn {
       });
   }, []);
 
+  const isLoadingRef = useRef(false);
+
   const subscribe = useCallback(async () => {
-    if (!isSupported || isLoading) return;
+    if (!isSupported || isLoadingRef.current) return;
+    isLoadingRef.current = true;
     setIsLoading(true);
 
     try {
       // Get VAPID public key from server
       const vapidRes = await fetch('/api/push-subscriptions/vapid-key');
       if (!vapidRes.ok) throw new Error('VAPID key fetch failed');
-      const { publicKey } = await vapidRes.json();
+      const vapidData = await vapidRes.json();
+      if (!vapidData.publicKey) throw new Error('VAPID public key not available');
+      const { publicKey } = vapidData;
 
       // Request notification permission
       const permission = await Notification.requestPermission();
@@ -62,7 +67,7 @@ export function usePushSubscription(): UsePushSubscriptionReturn {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as ArrayBuffer,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
       });
 
       // Send subscription to server
@@ -87,12 +92,14 @@ export function usePushSubscription(): UsePushSubscriptionReturn {
       console.error('Push subscribe error:', error);
       throw error;
     } finally {
+      isLoadingRef.current = false;
       setIsLoading(false);
     }
-  }, [isSupported, isLoading]);
+  }, [isSupported]);
 
   const unsubscribe = useCallback(async () => {
-    if (!isSupported || isLoading) return;
+    if (!isSupported || isLoadingRef.current) return;
+    isLoadingRef.current = true;
     setIsLoading(true);
 
     try {
@@ -102,15 +109,14 @@ export function usePushSubscription(): UsePushSubscriptionReturn {
       if (subscription) {
         const endpoint = subscription.endpoint;
 
-        // Unsubscribe from browser
-        await subscription.unsubscribe();
-
-        // Remove from server
+        // Remove from server first (reversible), then browser (irreversible)
         await fetch('/api/push-subscriptions', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ endpoint }),
         });
+
+        await subscription.unsubscribe();
       }
 
       setIsSubscribed(false);
@@ -118,9 +124,10 @@ export function usePushSubscription(): UsePushSubscriptionReturn {
       console.error('Push unsubscribe error:', error);
       throw error;
     } finally {
+      isLoadingRef.current = false;
       setIsLoading(false);
     }
-  }, [isSupported, isLoading]);
+  }, [isSupported]);
 
   return { isSupported, isSubscribed, subscribe, unsubscribe, isLoading };
 }

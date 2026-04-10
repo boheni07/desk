@@ -98,7 +98,7 @@ export default function UserDetailPage() {
 
   const fetchCompanies = useCallback(async () => {
     try {
-      const res = await fetch('/api/companies?limit=100');
+      const res = await fetch('/api/companies?limit=100&isActive=true');
       const json = await res.json();
       if (json.success) {
         setCompanies(json.data.companies.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
@@ -120,7 +120,6 @@ export default function UserDetailPage() {
         type: formData.type,
         isActive: formData.isActive,
         companyId: formData.type === 'customer' ? (formData.companyId || null) : null,
-        departmentId: null,
       };
       const res = await fetch(`/api/users/${id}`, {
         method: 'PUT',

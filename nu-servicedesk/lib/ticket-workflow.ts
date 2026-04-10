@@ -183,6 +183,7 @@ export async function approveExtend(
         approverId: ctx.autoApproved ? null : ctx.actorId,
         autoApproved: ctx.autoApproved ?? false,
         approvedAt: new Date(),
+        isDeleted: true,
       },
     });
 
@@ -288,6 +289,7 @@ export async function rejectExtend(
         status: 'REJECTED',
         approverId: ctx.actorId,
         rejectReason: ctx.rejectReason,
+        isDeleted: true,
       },
     });
 
@@ -396,6 +398,16 @@ export async function requestComplete(
 
     return cr;
   });
+
+  // 3rd attempt: auto-approve immediately
+  if (attemptNumber === BUSINESS_RULES.COMPLETE_MAX_ATTEMPTS) {
+    await approveComplete(completeRequest.id, {
+      actorId: ctx.actorId,
+      actorRole: ctx.actorRole,
+      autoApproved: true,
+    });
+    return completeRequest;
+  }
 
   // Notify customer/supervisors
   const notifyIds = new Set<string>();
@@ -589,6 +601,36 @@ export async function rejectComplete(
     });
   });
 
+  // After restore, check if deadline exceeded → auto-transition to DELAYED
+  if (returnStatus !== 'DELAYED') {
+    const restoredTicket = await prisma.ticket.findUnique({
+      where: { id: cr.ticketId },
+      select: { deadline: true },
+    });
+    if (restoredTicket?.deadline && new Date() > restoredTicket.deadline) {
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`
+          UPDATE tickets
+          SET status = 'DELAYED'::"TicketStatus",
+              updated_at = NOW()
+          WHERE id = ${cr.ticketId}
+            AND status = ${returnStatus}::"TicketStatus"
+          RETURNING id
+        `;
+        await tx.ticketStatusHistory.create({
+          data: {
+            ticketId: cr.ticketId,
+            previousStatus: returnStatus,
+            newStatus: 'DELAYED',
+            actorId: null,
+            actorType: 'SYSTEM',
+            reason: '완료반려 후 기한 초과로 자동 지연 전환',
+          },
+        });
+      });
+    }
+  }
+
   // Notify the requester (support who requested completion)
   await createNotification({
     userId: cr.requesterId,
@@ -598,11 +640,15 @@ export async function rejectComplete(
     ticketId: cr.ticketId,
   });
 
-  // On 2nd rejection, escalate to supervisor
+  // On 2nd rejection, escalate to admin users (관리책임자)
   if (cr.attemptNumber === 2) {
-    const supervisorIds = await getSupervisorUserIds(cr.ticketId);
-    if (supervisorIds.length > 0) {
-      await createNotificationsForUsers(supervisorIds, {
+    const adminUsers = await prisma.user.findMany({
+      where: { type: 'admin', isActive: true },
+      select: { id: true },
+    });
+    const adminIds = adminUsers.map((u) => u.id);
+    if (adminIds.length > 0) {
+      await createNotificationsForUsers(adminIds, {
         type: 'COMPLETE_2ND_REJECTED',
         title: '완료요청 2차 반려 에스컬레이션',
         body: `티켓 ${cr.ticket.ticketNumber}의 완료요청이 2회 반려되었습니다. 확인이 필요합니다.`,

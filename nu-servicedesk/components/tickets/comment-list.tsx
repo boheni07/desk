@@ -124,7 +124,7 @@ export default function CommentList({ ticketId, currentUserId, currentUserRole }
       const res = await fetch(`/api/tickets/${ticketId}/comments`);
       const json = await res.json();
       if (json.success) {
-        setComments(json.data);
+        setComments(Array.isArray(json.data) ? json.data : []);
       } else {
         setError(json.error?.message || '댓글을 불러올 수 없습니다.');
       }
@@ -449,140 +449,162 @@ export default function CommentList({ ticketId, currentUserId, currentUserRole }
         ) : comments.length === 0 ? (
           <p className="text-muted text-center mb-0">등록된 댓글이 없습니다.</p>
         ) : (
-          <div className="d-flex flex-column gap-3">
+          <div className="d-flex flex-column" style={{ gap: 12 }}>
             {comments.map((c) => {
               const internal = c.type === 'INTERNAL';
               const isEditing = editingId === c.id;
+              const isMine = c.author.id === currentUserId;
+              const accentColor = AVATAR_COLORS[c.author.type] || '#6c757d';
 
-              return (
-                <div
-                  key={c.id}
-                  className={`p-3 rounded ${
-                    c.isDeleted
-                      ? 'bg-light text-muted'
-                      : internal
-                        ? 'bg-warning bg-opacity-10 border border-warning'
-                        : 'bg-light border'
-                  }`}
-                >
-                  {/* Header */}
-                  <div className="d-flex justify-content-between align-items-start mb-2">
-                    <div className="d-flex align-items-center gap-2">
+              // ── 삭제된 댓글 ──
+              if (c.isDeleted) {
+                return (
+                  <div key={c.id} className="d-flex align-items-center" style={{ padding: '4px 12px', color: '#adb5bd', fontSize: '0.78rem', fontStyle: 'italic' }}>
+                    <BsTrash style={{ fontSize: '0.7rem', marginRight: 6, flexShrink: 0 }} />
+                    <span className="text-truncate">{c.content}</span>
+                    <span className="ms-2 flex-shrink-0" style={{ fontSize: '0.7rem' }}>{c.author.name} &middot; {formatDateTime(c.createdAt)}</span>
+                  </div>
+                );
+              }
+
+              // ── 내 댓글 (우측) ──
+              if (isMine) {
+                return (
+                  <div key={c.id} className="d-flex justify-content-end" style={{ gap: 8 }}>
+                    <div style={{ maxWidth: '75%', minWidth: 0 }}>
+                      {/* 말풍선 */}
                       <div
-                        className="d-flex align-items-center justify-content-center rounded-circle text-white fw-bold flex-shrink-0"
+                        className="position-relative comment-feed-item"
                         style={{
-                          width: 32,
-                          height: 32,
-                          fontSize: '0.8rem',
-                          backgroundColor: c.isDeleted ? '#6c757d' : (AVATAR_COLORS[c.author.type] ?? '#6c757d'),
+                          padding: '10px 14px',
+                          background: internal ? '#fffbeb' : '#E8EDFC',
+                          border: internal ? '1px solid #ffe066' : '1px solid #C5D0F8',
+                          borderRadius: '14px 14px 4px 14px',
+                        }}
+                        onMouseEnter={(e) => {
+                          const a = e.currentTarget.querySelector('.comment-actions') as HTMLElement | null;
+                          if (a) a.style.opacity = '1';
+                        }}
+                        onMouseLeave={(e) => {
+                          const a = e.currentTarget.querySelector('.comment-actions') as HTMLElement | null;
+                          if (a) a.style.opacity = '0';
                         }}
                       >
-                        {getInitial(c.author.name)}
-                      </div>
-                      <div>
-                        <span className="fw-semibold small">{c.author.name}</span>
-                        <Badge
-                          bg={ROLE_COLORS[c.author.type] || 'secondary'}
-                          className="ms-1"
-                          style={{ fontSize: '0.65rem' }}
-                        >
-                          {ROLE_LABELS[c.author.type] || c.author.type}
-                        </Badge>
                         {internal && (
-                          <Badge bg="warning" text="dark" className="ms-1" style={{ fontSize: '0.65rem' }}>
-                            <BsLock className="me-1" style={{ fontSize: '0.55rem' }} />내부
-                          </Badge>
+                          <div style={{ marginBottom: 4 }}>
+                            <span style={{ fontSize: '0.6rem', fontWeight: 600, padding: '1px 5px', borderRadius: 4, background: '#fff3bf', color: '#664d03' }}>
+                              <BsLock style={{ fontSize: '0.5rem', marginRight: 2 }} />내부 메모
+                            </span>
+                          </div>
                         )}
-                        {c.isEdited && !c.isDeleted && (
-                          <span className="text-muted ms-1" style={{ fontSize: '0.7rem' }}>(수정됨)</span>
+                        {isEditing ? (
+                          <div>
+                            <Form.Control as="textarea" rows={3} value={editContent} onChange={(e) => setEditContent(e.target.value)} maxLength={5000} className="mb-2" style={{ fontSize: '0.8125rem' }} />
+                            <div className="d-flex gap-2">
+                              <Button size="sm" variant="primary" onClick={handleSaveEdit} disabled={editSubmitting || !editContent.trim()}>{editSubmitting ? <Spinner animation="border" size="sm" /> : '저장'}</Button>
+                              <Button size="sm" variant="outline-secondary" onClick={handleCancelEdit}>취소</Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.8125rem', lineHeight: 1.55, wordBreak: 'break-word', color: internal ? '#664d03' : '#212529' }}>{c.content}</div>
                         )}
+                        {c.attachments && c.attachments.length > 0 && (
+                          <div className="d-flex flex-wrap gap-1" style={{ marginTop: 6 }}>
+                            {c.attachments.map((a) => (
+                              <button key={a.id} type="button" className="d-flex align-items-center gap-1" style={{ fontSize: '0.7rem', padding: '2px 7px', borderRadius: 4, border: '1px solid #C5D0F8', background: '#f0f3ff', color: '#495057', cursor: 'pointer' }} onClick={() => handleDownloadAttachment(a.id)} disabled={downloadingId === a.id} title={`${a.fileName} (${formatFileSize(a.fileSize)})`}>
+                                {downloadingId === a.id ? <Spinner animation="border" size="sm" style={{ width: 10, height: 10 }} /> : getFileIcon(a.mimeType)}
+                                <span className="text-truncate" style={{ maxWidth: '120px' }}>{a.fileName}</span>
+                                <BsDownload style={{ fontSize: '0.55rem', opacity: 0.6 }} />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {/* 호버 액션 */}
+                        {!isEditing && (canEdit(c) || canDelete(c)) && (
+                          <div className="comment-actions position-absolute d-flex" style={{ top: -8, right: 4, gap: 2, opacity: 0, transition: 'opacity 150ms' }}>
+                            {canEdit(c) && <button type="button" className="btn btn-sm" style={{ padding: '1px 5px', fontSize: '0.68rem', color: '#868e96', background: '#fff', border: '1px solid #dee2e6', borderRadius: 4 }} title={`수정 (${getRemainingMinutes(c.createdAt)}분)`} onClick={() => handleStartEdit(c)}><BsPencil style={{ fontSize: '0.6rem' }} /></button>}
+                            {canDelete(c) && <button type="button" className="btn btn-sm" style={{ padding: '1px 5px', fontSize: '0.68rem', color: '#fa5252', background: '#fff', border: '1px solid #ffc9c9', borderRadius: 4 }} title="삭제" onClick={() => handleDelete(c.id)} disabled={deletingId === c.id}>{deletingId === c.id ? <Spinner animation="border" size="sm" style={{ width: 10, height: 10 }} /> : <BsTrash style={{ fontSize: '0.6rem' }} />}</button>}
+                          </div>
+                        )}
+                      </div>
+                      {/* 시간 */}
+                      <div style={{ textAlign: 'right', fontSize: '0.68rem', color: '#adb5bd', marginTop: 2, paddingRight: 4 }}>
+                        {formatDateTime(c.createdAt)}
+                        {c.isEdited && <span style={{ marginLeft: 3, color: '#ced4da' }}>수정됨</span>}
                       </div>
                     </div>
-                    <div className="d-flex align-items-center gap-1">
-                      <span className="text-muted" style={{ fontSize: '0.75rem' }}>{formatDateTime(c.createdAt)}</span>
-                      {!c.isDeleted && !isEditing && (
-                        <>
-                          {canEdit(c) && (
-                            <Button
-                              variant="link"
-                              size="sm"
-                              className="p-0 ms-2 text-muted"
-                              title={`수정 가능 (${getRemainingMinutes(c.createdAt)}분 남음)`}
-                              onClick={() => handleStartEdit(c)}
-                            >
-                              <BsPencil style={{ fontSize: '0.8rem' }} />
-                            </Button>
-                          )}
-                          {canDelete(c) && (
-                            <Button
-                              variant="link"
-                              size="sm"
-                              className="p-0 ms-1 text-danger"
-                              title="삭제"
-                              onClick={() => handleDelete(c.id)}
-                              disabled={deletingId === c.id}
-                            >
-                              {deletingId === c.id
-                                ? <Spinner animation="border" size="sm" />
-                                : <BsTrash style={{ fontSize: '0.8rem' }} />}
-                            </Button>
-                          )}
-                        </>
+                    {/* 나 아바타 */}
+                    <div className="flex-shrink-0 d-flex align-items-center justify-content-center" style={{ width: 32, height: 32, borderRadius: '50%', background: '#3B5BDB', color: '#fff', fontSize: '0.72rem', fontWeight: 700, alignSelf: 'flex-start', marginTop: 2 }}>나</div>
+                  </div>
+                );
+              }
+
+              // ── 상대 댓글 (좌측 — 피드 스타일) ──
+              return (
+                <div key={c.id} className="d-flex" style={{ gap: 8 }}>
+                  {/* 아바타 */}
+                  <div className="flex-shrink-0 d-flex align-items-center justify-content-center" style={{ width: 32, height: 32, borderRadius: '50%', background: accentColor, color: '#fff', fontSize: '0.72rem', fontWeight: 700, alignSelf: 'flex-start', marginTop: 2 }}>{getInitial(c.author.name)}</div>
+                  <div style={{ maxWidth: '75%', minWidth: 0 }}>
+                    {/* 이름 + 역할 */}
+                    <div className="d-flex align-items-center gap-1" style={{ marginBottom: 3 }}>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#343a40' }}>{c.author.name}</span>
+                      <span style={{ fontSize: '0.6rem', fontWeight: 600, padding: '1px 5px', borderRadius: 4, background: c.author.type === 'admin' ? '#fee2e2' : c.author.type === 'support' ? '#e8edfc' : '#ebfbee', color: c.author.type === 'admin' ? '#dc2626' : c.author.type === 'support' ? '#3b5bdb' : '#2f9e44' }}>{ROLE_LABELS[c.author.type] || c.author.type}</span>
+                      {internal && <span style={{ fontSize: '0.6rem', fontWeight: 600, padding: '1px 5px', borderRadius: 4, background: '#fff3bf', color: '#664d03' }}><BsLock style={{ fontSize: '0.5rem', marginRight: 2 }} />내부</span>}
+                    </div>
+                    {/* 말풍선 */}
+                    <div
+                      className="position-relative comment-feed-item"
+                      style={{
+                        padding: '10px 14px',
+                        background: internal ? '#fffbeb' : '#f1f3f5',
+                        border: internal ? '1px solid #ffe066' : '1px solid #e9ecef',
+                        borderRadius: '14px 14px 14px 4px',
+                      }}
+                      onMouseEnter={(e) => {
+                        const a = e.currentTarget.querySelector('.comment-actions') as HTMLElement | null;
+                        if (a) a.style.opacity = '1';
+                      }}
+                      onMouseLeave={(e) => {
+                        const a = e.currentTarget.querySelector('.comment-actions') as HTMLElement | null;
+                        if (a) a.style.opacity = '0';
+                      }}
+                    >
+                      {isEditing ? (
+                        <div>
+                          <Form.Control as="textarea" rows={3} value={editContent} onChange={(e) => setEditContent(e.target.value)} maxLength={5000} className="mb-2" style={{ fontSize: '0.8125rem' }} />
+                          <div className="d-flex gap-2">
+                            <Button size="sm" variant="primary" onClick={handleSaveEdit} disabled={editSubmitting || !editContent.trim()}>{editSubmitting ? <Spinner animation="border" size="sm" /> : '저장'}</Button>
+                            <Button size="sm" variant="outline-secondary" onClick={handleCancelEdit}>취소</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.8125rem', lineHeight: 1.55, wordBreak: 'break-word', color: internal ? '#664d03' : '#212529' }}>{c.content}</div>
+                      )}
+                      {c.attachments && c.attachments.length > 0 && (
+                        <div className="d-flex flex-wrap gap-1" style={{ marginTop: 6 }}>
+                          {c.attachments.map((a) => (
+                            <button key={a.id} type="button" className="d-flex align-items-center gap-1" style={{ fontSize: '0.7rem', padding: '2px 7px', borderRadius: 4, border: '1px solid #dee2e6', background: '#fff', color: '#495057', cursor: 'pointer' }} onClick={() => handleDownloadAttachment(a.id)} disabled={downloadingId === a.id} title={`${a.fileName} (${formatFileSize(a.fileSize)})`}>
+                              {downloadingId === a.id ? <Spinner animation="border" size="sm" style={{ width: 10, height: 10 }} /> : getFileIcon(a.mimeType)}
+                              <span className="text-truncate" style={{ maxWidth: '120px' }}>{a.fileName}</span>
+                              <BsDownload style={{ fontSize: '0.55rem', opacity: 0.6 }} />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* 호버 액션 (지원담당자/관리자가 상대 댓글 삭제 가능) */}
+                      {!isEditing && (canEdit(c) || canDelete(c)) && (
+                        <div className="comment-actions position-absolute d-flex" style={{ top: -8, right: 4, gap: 2, opacity: 0, transition: 'opacity 150ms' }}>
+                          {canEdit(c) && <button type="button" className="btn btn-sm" style={{ padding: '1px 5px', fontSize: '0.68rem', color: '#868e96', background: '#fff', border: '1px solid #dee2e6', borderRadius: 4 }} title={`수정 (${getRemainingMinutes(c.createdAt)}분)`} onClick={() => handleStartEdit(c)}><BsPencil style={{ fontSize: '0.6rem' }} /></button>}
+                          {canDelete(c) && <button type="button" className="btn btn-sm" style={{ padding: '1px 5px', fontSize: '0.68rem', color: '#fa5252', background: '#fff', border: '1px solid #ffc9c9', borderRadius: 4 }} title="삭제" onClick={() => handleDelete(c.id)} disabled={deletingId === c.id}>{deletingId === c.id ? <Spinner animation="border" size="sm" style={{ width: 10, height: 10 }} /> : <BsTrash style={{ fontSize: '0.6rem' }} />}</button>}
+                        </div>
                       )}
                     </div>
+                    {/* 시간 */}
+                    <div style={{ fontSize: '0.68rem', color: '#adb5bd', marginTop: 2, paddingLeft: 4 }}>
+                      {formatDateTime(c.createdAt)}
+                      {c.isEdited && <span style={{ marginLeft: 3, color: '#ced4da' }}>수정됨</span>}
+                    </div>
                   </div>
-
-                  {/* Content */}
-                  {isEditing ? (
-                    <div>
-                      <Form.Control
-                        as="textarea"
-                        rows={3}
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        maxLength={5000}
-                        className="mb-2"
-                      />
-                      <div className="d-flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          onClick={handleSaveEdit}
-                          disabled={editSubmitting || !editContent.trim()}
-                        >
-                          {editSubmitting ? <Spinner animation="border" size="sm" /> : '저장'}
-                        </Button>
-                        <Button size="sm" variant="outline-secondary" onClick={handleCancelEdit}>취소</Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ whiteSpace: 'pre-wrap' }} className="small">
-                      {c.isDeleted ? <em className="text-muted">{c.content}</em> : c.content}
-                    </div>
-                  )}
-
-                  {/* 첨부파일 목록 */}
-                  {!c.isDeleted && c.attachments && c.attachments.length > 0 && (
-                    <div className="mt-2 d-flex flex-wrap gap-1">
-                      {c.attachments.map((a) => (
-                        <button
-                          key={a.id}
-                          type="button"
-                          className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
-                          style={{ fontSize: '0.75rem', padding: '2px 8px' }}
-                          onClick={() => handleDownloadAttachment(a.id)}
-                          disabled={downloadingId === a.id}
-                          title={`${a.fileName} (${formatFileSize(a.fileSize)})`}
-                        >
-                          {downloadingId === a.id
-                            ? <Spinner animation="border" size="sm" />
-                            : getFileIcon(a.mimeType)}
-                          <span className="text-truncate" style={{ maxWidth: '150px' }}>{a.fileName}</span>
-                          <BsDownload style={{ fontSize: '0.7rem', flexShrink: 0 }} />
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               );
             })}

@@ -124,11 +124,16 @@ export default function AttachmentList({ ticketId, currentUserId, currentUserRol
         }
 
         // Step 2: Upload to R2 via presigned URL
-        await fetch(presignJson.data.presignedUrl, {
+        const uploadRes = await fetch(presignJson.data.presignedUrl, {
           method: 'PUT',
           headers: { 'Content-Type': file.type || 'application/octet-stream' },
           body: file,
         });
+
+        if (!uploadRes.ok) {
+          setError(`${file.name} 업로드 실패 (스토리지 오류)`);
+          continue;
+        }
 
         completed++;
         setUploadProgress(Math.round((completed / totalFiles) * 100));

@@ -3,6 +3,7 @@
 // Design Ref: §10.1, §10.2 -- Desktop Sidebar Navigation (ITSM V3)
 
 import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import {
   BsSpeedometer2,
   BsTicketDetailedFill,
@@ -16,7 +17,6 @@ import {
   BsPersonFill,
   BsBellFill,
 } from 'react-icons/bs';
-import { useIsMobile } from '@/hooks/use-media-query';
 import type { UserType } from '@/types/auth';
 
 interface SidebarProps {
@@ -69,16 +69,13 @@ const navSections: NavSection[] = [
 
 export default function Sidebar({ userType }: SidebarProps) {
   const pathname = usePathname();
-  const isMobile = useIsMobile();
-
-  if (isMobile) return null;
 
   const isActive = (href: string) =>
     pathname === href || (href !== '/dashboard' && pathname.startsWith(href + '/'));
 
   return (
     <aside className="itsm-sidebar">
-      <nav className="py-3">
+      <nav className="py-3" aria-label="주 내비게이션">
         {navSections.map((section, si) => {
           const visible = section.items.filter((item) => item.roles.includes(userType));
           if (visible.length === 0) return null;
@@ -95,14 +92,15 @@ export default function Sidebar({ userType }: SidebarProps) {
               {visible.map((item) => {
                 const active = isActive(item.href);
                 return (
-                  <a
+                  <Link
                     key={item.href}
                     href={item.href}
                     className={`itsm-nav-link${active ? ' active' : ''}`}
+                    aria-current={active ? 'page' : undefined}
                   >
                     {item.icon}
                     <span>{item.label}</span>
-                  </a>
+                  </Link>
                 );
               })}
             </div>

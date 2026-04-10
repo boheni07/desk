@@ -4,7 +4,7 @@
 // Plan SC: SC-08 RBAC
 
 import { useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Card from 'react-bootstrap/Card';
 import Form from 'react-bootstrap/Form';
 import Button from 'react-bootstrap/Button';
@@ -13,12 +13,15 @@ import Spinner from 'react-bootstrap/Spinner';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [isLoading, setIsLoading] = useState(false);
+
+  const passwordChanged = searchParams.get('passwordChanged') === '1';
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -67,6 +70,12 @@ export default function LoginPage() {
 
       <Card className="shadow-sm border-0">
         <Card.Body className="p-4">
+          {passwordChanged && (
+            <Alert variant="success">
+              비밀번호가 성공적으로 변경되었습니다. 새 비밀번호로 로그인해 주세요.
+            </Alert>
+          )}
+
           {error && (
             <Alert variant="danger" dismissible onClose={() => setError(null)}>
               {error}
@@ -117,6 +126,7 @@ export default function LoginPage() {
                 variant="primary"
                 size="lg"
                 disabled={isLoading || !loginId || !password}
+                style={{ minWidth: 120 }}
               >
                 {isLoading ? (
                   <>

@@ -99,24 +99,38 @@ export default function NewTicketPage() {
 
   // ── 초기 데이터 로드 ──────────────────────────
   const fetchSession = useCallback(async () => {
-    const res = await fetch('/api/auth/session');
-    const json = await res.json();
-    if (json.success) setSessionUser(json.data);
+    try {
+      const res = await fetch('/api/auth/session');
+      const json = await res.json();
+      if (json.success) setSessionUser(json.data);
+      else setError('세션을 불러올 수 없습니다.');
+    } catch {
+      setError('서버에 연결할 수 없습니다.');
+    }
   }, []);
 
   const fetchProjects = useCallback(async () => {
-    const res = await fetch('/api/projects?limit=100&isActive=true');
-    const json = await res.json();
-    if (json.success) setProjects(json.data.projects);
+    try {
+      const res = await fetch('/api/projects?limit=100&isActive=true&myProjects=true');
+      const json = await res.json();
+      if (json.success) setProjects(json.data.projects);
+    } catch {
+      setError('프로젝트를 불러올 수 없습니다.');
+    }
   }, []);
 
   const fetchCategories = useCallback(async () => {
-    const res = await fetch('/api/categories?limit=100');
-    const json = await res.json();
-    if (json.success) {
-      setCategories(
-        json.data.categories.filter((c: CategoryOption & { isActive: boolean }) => c.isActive),
-      );
+    try {
+      const res = await fetch('/api/categories?limit=100');
+      const json = await res.json();
+      if (json.success) {
+        const list = Array.isArray(json.data) ? json.data : (json.data.categories ?? []);
+        setCategories(
+          list.filter((c: CategoryOption & { isActive: boolean }) => c.isActive),
+        );
+      }
+    } catch {
+      setError('카테고리를 불러올 수 없습니다.');
     }
   }, []);
 
@@ -126,12 +140,12 @@ export default function NewTicketPage() {
     );
   }, [fetchSession, fetchProjects, fetchCategories]);
 
-  // 고객: 프로젝트 1개면 자동 선택
+  // 프로젝트 1개면 자동 선택 (역할 무관)
   useEffect(() => {
-    if (isCustomer && projects.length === 1) {
+    if (projects.length === 1 && !projectId) {
       setProjectId(projects[0].id);
     }
-  }, [isCustomer, projects]);
+  }, [projects, projectId]);
 
   // 고객: 등록방법 항상 DIRECT(온라인)
   useEffect(() => {

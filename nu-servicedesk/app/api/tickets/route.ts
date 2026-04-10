@@ -8,6 +8,8 @@ import { getSession } from '@/lib/session';
 import { logger } from '@/lib/logger';
 import { BUSINESS_RULES } from '@/lib/constants';
 import { generateTicketNumber } from '@/lib/ticket-number';
+import { addBusinessDays } from '@/lib/business-hours';
+import { createNotificationsForUsers } from '@/lib/notification-helper';
 
 const createTicketSchema = z.object({
   title: z.string().min(1, '제목을 입력해 주세요.').max(200, '제목은 200자 이내로 입력해 주세요.'),
@@ -19,6 +21,12 @@ const createTicketSchema = z.object({
   urgencyReason: z.string().max(500, '긴급 사유는 500자 이내로 입력해 주세요.').optional(),
   registrationMethod: z.enum(['DIRECT', 'PHONE', 'EMAIL', 'OTHER']).optional().default('DIRECT'),
 });
+
+// Allowlists for query param validation
+const VALID_STATUSES = new Set(['REGISTERED','RECEIVED','IN_PROGRESS','DELAYED','EXTEND_REQUESTED','COMPLETE_REQUESTED','SATISFACTION_PENDING','CLOSED','CANCELLED']);
+const VALID_PRIORITIES = new Set(['URGENT','HIGH','NORMAL','LOW']);
+const VALID_SORT_BY = new Set(['createdAt','deadline','priority']);
+const VALID_SORT_ORDER = new Set(['asc','desc']);
 
 /**
  * GET /api/tickets — 티켓 목록 (RBAC 필터링)
@@ -51,15 +59,15 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')?.trim() || '';
     const createdFrom = searchParams.get('createdFrom') || '';  // ISO date string
     const createdTo = searchParams.get('createdTo') || '';      // ISO date string
-    const sortBy = searchParams.get('sortBy') || 'createdAt';  // createdAt | deadline | priority
-    const sortOrder = searchParams.get('sortOrder') || 'desc';  // asc | desc
+    const sortBy = VALID_SORT_BY.has(searchParams.get('sortBy') || '') ? searchParams.get('sortBy')! : 'createdAt';
+    const sortOrder = VALID_SORT_ORDER.has(searchParams.get('sortOrder') || '') ? searchParams.get('sortOrder')! : 'desc';
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: Record<string, any> = {};
 
     // Filters: comma-separated multi-select for status and priority
     if (status) {
-      const statuses = status.split(',').filter(Boolean);
+      const statuses = status.split(',').filter(Boolean).filter(s => VALID_STATUSES.has(s));
       if (statuses.length === 1) {
         where.status = statuses[0];
       } else if (statuses.length > 1) {
@@ -67,7 +75,7 @@ export async function GET(request: NextRequest) {
       }
     }
     if (priority) {
-      const priorities = priority.split(',').filter(Boolean);
+      const priorities = priority.split(',').filter(Boolean).filter(p => VALID_PRIORITIES.has(p));
       if (priorities.length === 1) {
         where.priority = priorities[0];
       } else if (priorities.length > 1) {
@@ -272,9 +280,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate desired date (default: +5 business days)
+    const currentYear = new Date().getFullYear();
+    const holidays = await prisma.holiday.findMany({
+      where: { year: { in: [currentYear - 1, currentYear, currentYear + 1] } },
+      select: { date: true },
+    });
+    const holidayDates = holidays.map((h) => h.date);
+
     const desiredDateValue = desiredDate
       ? new Date(desiredDate)
-      : new Date(Date.now() + BUSINESS_RULES.DESIRED_DATE_DEFAULT_DAYS * 24 * 60 * 60 * 1000);
+      : addBusinessDays(new Date(), BUSINESS_RULES.DESIRED_DATE_DEFAULT_DAYS, holidayDates);
 
     // Generate ticket number
     const ticketNumber = await generateTicketNumber();
@@ -324,6 +339,21 @@ export async function POST(request: NextRequest) {
 
       return newTicket;
     });
+
+    // Send TICKET_CREATED notification to project's main_support assignees
+    const mainSupportMembers = await prisma.projectMember.findMany({
+      where: { projectId, role: 'main_support' },
+      select: { userId: true },
+    });
+    const recipientIds = mainSupportMembers.map((m) => m.userId);
+    if (recipientIds.length > 0) {
+      createNotificationsForUsers(recipientIds, {
+        type: 'TICKET_CREATED',
+        title: '새 티켓이 등록되었습니다',
+        body: `[${ticket.ticketNumber}] ${title}`,
+        ticketId: ticket.id,
+      }).catch(() => {}); // fire-and-forget
+    }
 
     return NextResponse.json({ success: true, data: ticket }, { status: 201 });
   } catch (error) {

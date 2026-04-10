@@ -171,7 +171,7 @@ export default function CompaniesPage() {
     setDeactivating(true);
     setDeactivateError('');
     try {
-      const res = await fetch(`/api/companies/${deactivateTarget.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/companies/${deactivateTarget.id}/deactivate`, { method: 'POST' });
       const json = await res.json();
       if (json.success) {
         setShowDeactivateDialog(false);

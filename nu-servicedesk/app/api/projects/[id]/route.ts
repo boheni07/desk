@@ -65,8 +65,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // RBAC: customer can only see their assigned projects
-    if (session.type === 'customer') {
+    // RBAC: customer and support can only see their assigned projects
+    if (session.type === 'customer' || session.type === 'support') {
       const isMember = project.members.some((m) => m.userId === session.userId);
       if (!isMember) {
         return NextResponse.json(

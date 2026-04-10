@@ -4,7 +4,7 @@
 
 import Dropdown from 'react-bootstrap/Dropdown';
 import { useRouter } from 'next/navigation';
-import { BsPersonCircle, BsBoxArrowRight, BsPersonGear } from 'react-icons/bs';
+import { BsBoxArrowRight, BsPersonGear } from 'react-icons/bs';
 import NotificationBell from '@/components/layout/notification-bell';
 import type { UserType } from '@/types/auth';
 
@@ -46,16 +46,19 @@ export default function Header({ user }: HeaderProps) {
       </a>
 
       {/* Actions */}
-      <div className="d-flex align-items-center gap-2">
+      <div className="d-flex align-items-center" style={{ gap: '1.25rem' }}>
         {/* Notification bell */}
         <NotificationBell />
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 24, background: 'var(--border-subtle)' }} />
 
         {/* User menu */}
         <Dropdown align="end">
           <Dropdown.Toggle
-            as="div"
             id="user-menu"
-            style={{ cursor: 'pointer' }}
+            className="btn border-0 bg-transparent p-0 d-flex align-items-center"
+            aria-label="사용자 메뉴"
           >
             <div
               className="d-flex align-items-center gap-2 px-2 py-1 rounded"
@@ -64,6 +67,7 @@ export default function Header({ user }: HeaderProps) {
                 background: '#F8F9FA',
                 transition: 'all 150ms ease',
                 minWidth: 0,
+                height: 36,
               }}
               onMouseEnter={(e) => {
                 (e.currentTarget as HTMLElement).style.background = 'var(--brand-primary-lt)';
@@ -84,7 +88,7 @@ export default function Header({ user }: HeaderProps) {
                   flexShrink: 0,
                 }}
               >
-                {user.name.charAt(0)}
+                {user.name.trim().charAt(0) || '?'}
               </div>
               <div className="d-none d-sm-block" style={{ lineHeight: 1.2 }}>
                 <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>

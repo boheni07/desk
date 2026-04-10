@@ -30,8 +30,8 @@ export function useMediaQuery(query: string): boolean {
 }
 
 /**
- * Convenience hook: true when viewport width <= 768px.
+ * Convenience hook: true when viewport width <= 767.98px.
  */
 export function useIsMobile(): boolean {
-  return useMediaQuery('(max-width: 768px)');
+  return useMediaQuery('(max-width: 767.98px)');
 }

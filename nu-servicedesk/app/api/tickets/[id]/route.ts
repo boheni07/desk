@@ -119,8 +119,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // RBAC: customer can only see tickets in their assigned projects
-    if (session.type === 'customer') {
+    // RBAC: customer and support can only see tickets in their assigned projects
+    if (session.type === 'customer' || session.type === 'support') {
       const isMember = ticket.project.members.length > 0;
       if (!isMember) {
         return NextResponse.json(
@@ -154,13 +154,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    if (session.type === 'customer') {
-      return NextResponse.json(
-        { success: false, error: { code: 'FORBIDDEN', message: '지원담당자 또는 관리자만 수정할 수 있습니다.', status: 403 } },
-        { status: 403 },
-      );
-    }
-
     const { id } = await params;
 
     const ticket = await prisma.ticket.findUnique({ where: { id } });
@@ -169,6 +162,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'NOT_FOUND', message: '티켓을 찾을 수 없습니다.', status: 404 } },
         { status: 404 },
       );
+    }
+
+    // RBAC: customer can edit only their own REGISTERED tickets
+    if (session.type === 'customer') {
+      if (ticket.status !== 'REGISTERED' || ticket.registeredById !== session.userId) {
+        return NextResponse.json(
+          { success: false, error: { code: 'FORBIDDEN', message: '본인이 등록한 REGISTERED 상태의 티켓만 수정할 수 있습니다.', status: 403 } },
+          { status: 403 },
+        );
+      }
     }
 
     if (TERMINAL_STATUSES.includes(ticket.status)) {

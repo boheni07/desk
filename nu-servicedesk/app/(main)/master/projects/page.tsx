@@ -474,77 +474,126 @@ export default function ProjectsPage() {
 
             <hr className="my-3" />
 
-            {/* 고객담당자 선택 */}
-            <Form.Group className="mb-3">
-              <Form.Label className="fw-semibold d-flex align-items-center gap-2">
-                고객담당자
-                {selectedCustomers.length > 0 && (
-                  <span className="badge" style={{ background: 'rgba(59,91,219,0.1)', color: 'var(--brand-primary)', fontSize: '0.72rem', fontWeight: 600 }}>
-                    {selectedCustomers.length}명 선택
-                  </span>
-                )}
-              </Form.Label>
-              {!formData.companyId ? (
-                <div className="text-muted small py-2">고객사를 먼저 선택해 주세요.</div>
-              ) : loadingCustomers ? (
-                <div className="text-muted small py-2"><Spinner size="sm" animation="border" className="me-1" />불러오는 중...</div>
-              ) : customerUsers.length === 0 ? (
-                <div className="text-muted small py-2">해당 고객사에 등록된 고객담당자가 없습니다.</div>
-              ) : (
-                <div className="d-flex flex-wrap gap-2 member-toggle">
-                  {customerUsers.map((u) => {
-                    const selected = selectedCustomers.includes(u.id);
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        className={`member-toggle-btn${selected ? ' selected' : ''}`}
-                        onClick={() => toggleCustomer(u.id)}
-                      >
-                        {u.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              <Form.Text className="text-muted">여러 명 선택 가능합니다.</Form.Text>
-            </Form.Group>
+            {/* 멤버 선택: 좌우 배치 */}
+            <Row>
+              {/* 좌측: 고객담당자 */}
+              <Col md={6} style={{ borderRight: '1px solid var(--border-subtle)' }} className="pe-md-4 mb-3 mb-md-0">
+                <Form.Group>
+                  <Form.Label className="fw-semibold d-flex align-items-center gap-2 mb-3" style={{ fontSize: '0.875rem' }}>
+                    <span style={{ display: 'inline-block', width: 3, height: 14, borderRadius: 2, background: '#2F9E44', marginRight: 4 }} />
+                    고객담당자
+                    {selectedCustomers.length > 0 && (
+                      <span className="badge" style={{ background: 'rgba(47,158,68,0.1)', color: '#2F9E44', fontSize: '0.72rem', fontWeight: 600 }}>
+                        {selectedCustomers.length}명 선택
+                      </span>
+                    )}
+                  </Form.Label>
+                  {!formData.companyId ? (
+                    <div className="text-muted small py-2">고객사를 먼저 선택해 주세요.</div>
+                  ) : loadingCustomers ? (
+                    <div className="text-muted small py-2"><Spinner size="sm" animation="border" className="me-1" />불러오는 중...</div>
+                  ) : customerUsers.length === 0 ? (
+                    <div className="text-muted small py-2">해당 고객사에 등록된 고객담당자가 없습니다.</div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                      {customerUsers.map((u) => {
+                        const selected = selectedCustomers.includes(u.id);
+                        return (
+                          <button
+                            key={u.id}
+                            type="button"
+                            className="d-flex align-items-center w-100 text-start border rounded-2 px-3 py-2"
+                            style={{
+                              background: selected ? 'rgba(47,158,68,0.08)' : 'transparent',
+                              borderColor: selected ? '#2F9E44' : 'var(--border-subtle)',
+                              color: selected ? '#2F9E44' : 'var(--text-primary)',
+                              fontWeight: selected ? 600 : 400,
+                              fontSize: '0.8125rem',
+                              cursor: 'pointer',
+                              transition: 'all 150ms ease',
+                            }}
+                            onClick={() => toggleCustomer(u.id)}
+                          >
+                            <span style={{
+                              width: 28, height: 28, borderRadius: '50%',
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              background: selected ? '#2F9E44' : 'var(--surface-alt)',
+                              color: selected ? '#fff' : 'var(--text-muted)',
+                              fontSize: '0.75rem', fontWeight: 600, marginRight: 10, flexShrink: 0,
+                            }}>
+                              {u.name.charAt(0)}
+                            </span>
+                            <span className="flex-grow-1">{u.name}</span>
+                            {selected && <span style={{ fontSize: '0.875rem', color: '#2F9E44' }}>✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <Form.Text className="text-muted mt-2 d-block">여러 명 선택 가능합니다.</Form.Text>
+                </Form.Group>
+              </Col>
 
-            {/* 지원담당자 선택 */}
-            <Form.Group className="mb-1">
-              <Form.Label className="fw-semibold d-flex align-items-center gap-2">
-                지원담당자 <span className="text-danger">*</span>
-                {selectedSupports.length > 0 && (
-                  <span className="badge" style={{ background: 'rgba(47,158,68,0.1)', color: '#2F9E44', fontSize: '0.72rem', fontWeight: 600 }}>
-                    {selectedSupports.length}명 선택
-                  </span>
-                )}
-              </Form.Label>
-              {loadingSupports ? (
-                <div className="text-muted small py-2"><Spinner size="sm" animation="border" className="me-1" />불러오는 중...</div>
-              ) : supportUsers.length === 0 ? (
-                <div className="text-muted small py-2">등록된 지원담당자가 없습니다.</div>
-              ) : (
-                <div className="d-flex flex-wrap gap-2 member-toggle">
-                  {supportUsers.map((u) => {
-                    const selected = selectedSupports.includes(u.id);
-                    const isMain = selectedSupports[0] === u.id;
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        className={`member-toggle-btn${selected ? (isMain ? ' main-selected' : ' selected') : ''}`}
-                        onClick={() => toggleSupport(u.id)}
-                      >
-                        {u.name}
-                        {isMain && <span className="ms-1" style={{ fontSize: '0.65rem', opacity: 0.85 }}>Main</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              <Form.Text className="text-muted">처음 선택한 담당자가 Main 담당자로 지정됩니다.</Form.Text>
-            </Form.Group>
+              {/* 우측: 지원담당자 */}
+              <Col md={6} className="ps-md-4">
+                <Form.Group>
+                  <Form.Label className="fw-semibold d-flex align-items-center gap-2 mb-3" style={{ fontSize: '0.875rem' }}>
+                    <span style={{ display: 'inline-block', width: 3, height: 14, borderRadius: 2, background: '#7C3AED', marginRight: 4 }} />
+                    지원담당자 <span className="text-danger">*</span>
+                    {selectedSupports.length > 0 && (
+                      <span className="badge" style={{ background: 'rgba(124,58,237,0.1)', color: '#7C3AED', fontSize: '0.72rem', fontWeight: 600 }}>
+                        {selectedSupports.length}명 선택
+                      </span>
+                    )}
+                  </Form.Label>
+                  {loadingSupports ? (
+                    <div className="text-muted small py-2"><Spinner size="sm" animation="border" className="me-1" />불러오는 중...</div>
+                  ) : supportUsers.length === 0 ? (
+                    <div className="text-muted small py-2">등록된 지원담당자가 없습니다.</div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                      {supportUsers.map((u) => {
+                        const selected = selectedSupports.includes(u.id);
+                        const isMain = selectedSupports[0] === u.id;
+                        return (
+                          <button
+                            key={u.id}
+                            type="button"
+                            className="d-flex align-items-center w-100 text-start border rounded-2 px-3 py-2"
+                            style={{
+                              background: selected ? (isMain ? 'rgba(124,58,237,0.12)' : 'rgba(124,58,237,0.06)') : 'transparent',
+                              borderColor: selected ? '#7C3AED' : 'var(--border-subtle)',
+                              color: selected ? '#7C3AED' : 'var(--text-primary)',
+                              fontWeight: selected ? 600 : 400,
+                              fontSize: '0.8125rem',
+                              cursor: 'pointer',
+                              transition: 'all 150ms ease',
+                            }}
+                            onClick={() => toggleSupport(u.id)}
+                          >
+                            <span style={{
+                              width: 28, height: 28, borderRadius: '50%',
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              background: selected ? '#7C3AED' : 'var(--surface-alt)',
+                              color: selected ? '#fff' : 'var(--text-muted)',
+                              fontSize: '0.75rem', fontWeight: 600, marginRight: 10, flexShrink: 0,
+                            }}>
+                              {u.name.charAt(0)}
+                            </span>
+                            <span className="flex-grow-1">{u.name}</span>
+                            {isMain && (
+                              <span className="badge" style={{ background: '#7C3AED', color: '#fff', fontSize: '0.65rem', fontWeight: 600 }}>Main</span>
+                            )}
+                            {selected && !isMain && <span style={{ fontSize: '0.875rem', color: '#7C3AED' }}>✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <Form.Text className="text-muted mt-2 d-block">처음 선택한 담당자가 Main 담당자로 지정됩니다.</Form.Text>
+                </Form.Group>
+              </Col>
+            </Row>
           </Form>
         </Modal.Body>
         <Modal.Footer>

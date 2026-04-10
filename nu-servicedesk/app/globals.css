@@ -1,5 +1,4 @@
 /* nu-ServiceDesk — ITSM Professional Design System V3.0 */
-@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
 
 /* ═══════════════════════════════════════════════════════════════
    Design Tokens
@@ -104,6 +103,14 @@ body {
   align-items: center;
   padding: 0 1.25rem;
 }
+.itsm-header > * {
+  display: flex;
+  align-items: center;
+}
+/* Hide dropdown caret in header toggles */
+.itsm-header .dropdown-toggle::after {
+  display: none;
+}
 
 .itsm-brand {
   font-size: 1.1rem;
@@ -190,7 +197,7 @@ body {
   flex: 1;
   min-width: 0;
   padding: var(--page-padding);
-  padding-bottom: calc(var(--page-padding) + var(--bottom-nav-height, 0px));
+  padding-bottom: var(--page-padding);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -682,7 +689,7 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Toggle member button (프로젝트 멤버 선택)
+   Toggle member button
    ═══════════════════════════════════════════════════════════════ */
 .member-toggle {
   display: flex;
@@ -742,7 +749,7 @@ body {
   flex-shrink: 0;
 }
 
-/* Info grid: 메타정보 카드 내 레이블+값 격자 */
+/* Info grid */
 .info-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -800,6 +807,9 @@ body {
 @media (max-width: 767.98px) {
   :root {
     --page-padding: 1rem;
+  }
+  .itsm-content {
+    padding-bottom: calc(var(--page-padding) + var(--bottom-nav-height)) !important;
   }
   .page-header { margin-bottom: 1rem; padding-bottom: 0.75rem; }
   .page-header-title { font-size: 1.1rem; }

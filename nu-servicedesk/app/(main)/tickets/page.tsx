@@ -559,7 +559,7 @@ export default function TicketsPage() {
                       <td className="text-center">
                         <PriorityBadge priority={t.priority as TicketPriority} />
                       </td>
-                      <td style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>{t.project.name}</td>
+                      <td style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>{t.project?.name ?? '—'}</td>
                       <td style={{ fontSize: '0.8125rem' }}>
                         {t.assignments.length > 0
                           ? t.assignments.map((a) => a.user.name).join(', ')
@@ -578,7 +578,7 @@ export default function TicketsPage() {
             </div>
 
             <div className="d-flex align-items-center justify-content-between px-1">
-              <span className="text-muted small">총 {total}건 중 {(page - 1) * limit + 1}–{Math.min(page * limit, total)}건</span>
+              <span className="text-muted small">{total === 0 ? '결과 없음' : `총 ${total}건 중 ${(page - 1) * limit + 1}–${Math.min(page * limit, total)}건`}</span>
               {totalPages > 1 && (
                 <Pagination size="sm" className="mb-0">
                   <Pagination.First disabled={page === 1} onClick={() => setPage(1)} />

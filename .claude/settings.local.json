@@ -1,7 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(curl:*)",
+      "Bash(npx next:*)",
+      "Bash(python -m json.tool)",
+      "Bash(npx prisma:*)",
+      "Bash(docker exec nusd-postgres:*)",
+      "Bash(node:*)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(xxd)",
+      "Bash(python3:*)",
+      "Bash(npx vitest:*)",
+      "Bash(docker exec nusd-redis:*)",
+      "Bash(npx tsx:*)"
     ]
   }
 }

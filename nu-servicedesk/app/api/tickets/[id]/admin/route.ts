@@ -9,6 +9,8 @@ import { logger } from '@/lib/logger';
 
 type RouteParams = { params: Promise<{ id: string }> };
 
+const VALID_TICKET_STATUSES = ['REGISTERED','RECEIVED','IN_PROGRESS','DELAYED','EXTEND_REQUESTED','COMPLETE_REQUESTED','SATISFACTION_PENDING','CLOSED','CANCELLED'];
+
 const adminEditSchema = z.object({
   field: z.enum(['TITLE', 'CONTENT', 'CATEGORY', 'PRIORITY', 'ASSIGNEE', 'STATUS', 'DEADLINE']),
   value: z.string().min(1, '값을 입력해 주세요.'),
@@ -111,22 +113,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         });
         break;
       }
-      case 'STATUS':
+      case 'STATUS': {
         // Direct status change (workflow override by admin)
+        if (!VALID_TICKET_STATUSES.includes(value)) {
+          return NextResponse.json(
+            { success: false, error: { code: 'INVALID_STATUS', message: '유효하지 않은 상태값입니다.', status: 400 } },
+            { status: 400 },
+          );
+        }
         previousValue = ticket.status;
         updateData.status = value;
-        // Also record in status history
-        await prisma.ticketStatusHistory.create({
-          data: {
-            ticketId: id,
-            previousStatus: ticket.status,
-            newStatus: value as any,
-            actorId: session.userId,
-            actorType: 'USER',
-            reason: `관리자 직접 변경: ${reason}`,
-          },
-        });
         break;
+      }
       case 'DEADLINE':
         previousValue = ticket.deadline?.toISOString() ?? null;
         updateData.deadline = new Date(value);
@@ -143,25 +141,41 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         break;
     }
 
-    // Apply update if there are field changes
+    // Apply update + record admin edit in a transaction
     let updated = ticket;
-    if (Object.keys(updateData).length > 0) {
-      updated = await prisma.ticket.update({
-        where: { id },
-        data: updateData,
-      });
-    }
+    await prisma.$transaction(async (tx) => {
+      if (Object.keys(updateData).length > 0) {
+        updated = await tx.ticket.update({
+          where: { id },
+          data: updateData,
+        });
+      }
 
-    // Record admin edit
-    await prisma.ticketAdminEdit.create({
-      data: {
-        ticketId: id,
-        adminId: session.userId,
-        fieldName: field,
-        previousValue,
-        newValue: value,
-        reason,
-      },
+      // Record status history for STATUS changes inside the transaction
+      if (field === 'STATUS') {
+        await tx.ticketStatusHistory.create({
+          data: {
+            ticketId: id,
+            previousStatus: previousValue as any,
+            newStatus: value as any,
+            actorId: session.userId,
+            actorType: 'USER',
+            reason: `관리자 직접 변경: ${reason}`,
+          },
+        });
+      }
+
+      // Record admin edit
+      await tx.ticketAdminEdit.create({
+        data: {
+          ticketId: id,
+          adminId: session.userId,
+          fieldName: field,
+          previousValue,
+          newValue: value,
+          reason,
+        },
+      });
     });
 
     return NextResponse.json({ success: true, data: updated });

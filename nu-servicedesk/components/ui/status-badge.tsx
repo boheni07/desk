@@ -43,15 +43,17 @@ const STATUS_ICON: Record<TicketStatus, string> = {
  */
 export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
   const sizeStyle = size === 'sm' ? { fontSize: '0.65rem', padding: '0.2em 0.5em' } : {};
-  const label = TICKET_STATUS_LABELS[status];
+  const label = TICKET_STATUS_LABELS[status] ?? status;
+  const cssClass = STATUS_CSS_CLASS[status] ?? 'badge-secondary';
+  const icon = STATUS_ICON[status] ?? '●';
 
   return (
     <span
-      className={`badge-status ${STATUS_CSS_CLASS[status]}`}
+      className={`badge-status ${cssClass}`}
       style={sizeStyle}
       aria-label={`상태: ${label}`}
     >
-      <span aria-hidden="true">{STATUS_ICON[status]} </span>
+      <span aria-hidden="true">{icon} </span>
       {label}
     </span>
   );

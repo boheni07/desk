@@ -4,6 +4,7 @@
 // Plan SC: FR-22 Dashboard, SC-08 RBAC
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import Container from 'react-bootstrap/Container';
 import Row from 'react-bootstrap/Row';
 import Col from 'react-bootstrap/Col';
@@ -93,6 +94,7 @@ export default function DashboardPage() {
     async function load() {
       try {
         const res = await fetch('/api/dashboard');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         if (json.success) {
           setData(json.data);
@@ -223,9 +225,9 @@ function TicketTableRow({ ticket, showAssignee }: { ticket: TicketRow; showAssig
         <span className="ticket-number">{ticket.ticketNumber}</span>
       </td>
       <td className="text-truncate" style={{ maxWidth: 200 }}>
-        <a href={`/tickets/${ticket.id}`} className="text-decoration-none fw-semibold" style={{ color: 'var(--text-primary)' }}>
+        <Link href={`/tickets/${ticket.id}`} className="text-decoration-none fw-semibold" style={{ color: 'var(--text-primary)' }}>
           {ticket.title}
-        </a>
+        </Link>
       </td>
       <td><StatusBadge status={ticket.status} size="sm" /></td>
       <td><PriorityBadge priority={ticket.priority} /></td>
@@ -341,7 +343,7 @@ function AdminDashboard({ data }: { data: AdminData }) {
                         ? `${overdayDays}일 초과`
                         : overdueHours > 0 ? `${overdueHours}시간 초과` : '기한 초과';
                       return (
-                        <a
+                        <Link
                           key={t.id}
                           href={`/tickets/${t.id}`}
                           className="list-group-item list-group-item-action py-3"
@@ -361,13 +363,13 @@ function AdminDashboard({ data }: { data: AdminData }) {
                             </div>
                             <small className="text-danger fw-semibold text-nowrap ms-2">{overdueLabel}</small>
                           </div>
-                        </a>
+                        </Link>
                       );
                     })}
                     {delayedTickets.length > 5 && (
-                      <a href="/tickets?status=DELAYED" className="list-group-item list-group-item-action text-center text-primary py-2 small">
+                      <Link href="/tickets?status=DELAYED" className="list-group-item list-group-item-action text-center text-primary py-2 small">
                         +{delayedTickets.length - 5}건 더 보기
-                      </a>
+                      </Link>
                     )}
                   </div>
                 </Card.Body>
@@ -389,7 +391,7 @@ function AdminDashboard({ data }: { data: AdminData }) {
                 <Card.Body className="p-0">
                   <div className="list-group list-group-flush">
                     {secondRejectionTickets.slice(0, 5).map((item) => (
-                      <a
+                      <Link
                         key={item.requestId}
                         href={`/tickets/${item.ticket.id}`}
                         className="list-group-item list-group-item-action py-3"
@@ -414,7 +416,7 @@ function AdminDashboard({ data }: { data: AdminData }) {
                             )}
                           </div>
                         </div>
-                      </a>
+                      </Link>
                     ))}
                   </div>
                 </Card.Body>
@@ -428,9 +430,9 @@ function AdminDashboard({ data }: { data: AdminData }) {
       <div className="table-card mb-4">
         <div className="d-flex justify-content-between align-items-center px-1 mb-2" style={{ padding: '0.75rem 1.25rem 0' }}>
           <span className="fw-semibold" style={{ fontSize: '0.9375rem', color: 'var(--text-primary)' }}>최근 등록 티켓</span>
-          <a href="/tickets" className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1" style={{ fontSize: '0.8125rem' }}>
+          <Link href="/tickets" className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1" style={{ fontSize: '0.8125rem' }}>
             전체 보기 <BsArrowRight size={12} />
-          </a>
+          </Link>
         </div>
         <div className="table-responsive">
           <table className="itsm-table">
@@ -546,7 +548,7 @@ function SupportDashboard({ data }: { data: SupportData }) {
                     <tr key={t.id}>
                       <td><span className="ticket-number">{t.ticketNumber}</span></td>
                       <td className="text-truncate" style={{ maxWidth: 200 }}>
-                        <a href={`/tickets/${t.id}`} className="text-decoration-none fw-semibold" style={{ color: 'var(--text-primary)' }}>{t.title}</a>
+                        <Link href={`/tickets/${t.id}`} className="text-decoration-none fw-semibold" style={{ color: 'var(--text-primary)' }}>{t.title}</Link>
                       </td>
                       <td><StatusBadge status={t.status} size="sm" /></td>
                       <td><PriorityBadge priority={t.priority} /></td>
@@ -576,9 +578,9 @@ function SupportDashboard({ data }: { data: SupportData }) {
       <div className="table-card mb-4">
         <div className="d-flex justify-content-between align-items-center px-1 mb-2" style={{ padding: '0.75rem 1.25rem 0' }}>
           <span className="fw-semibold" style={{ fontSize: '0.9375rem', color: 'var(--text-primary)' }}>최근 활동</span>
-          <a href="/tickets" className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1" style={{ fontSize: '0.8125rem' }}>
+          <Link href="/tickets" className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1" style={{ fontSize: '0.8125rem' }}>
             전체 보기 <BsArrowRight size={12} />
-          </a>
+          </Link>
         </div>
         <div className="table-responsive">
           <table className="itsm-table">
@@ -647,9 +649,9 @@ function CustomerDashboard({ data }: { data: CustomerData }) {
       <div className="table-card mb-4">
         <div className="d-flex justify-content-between align-items-center px-1 mb-2" style={{ padding: '0.75rem 1.25rem 0' }}>
           <span className="fw-semibold" style={{ fontSize: '0.9375rem', color: 'var(--text-primary)' }}>최근 티켓</span>
-          <a href="/tickets" className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1" style={{ fontSize: '0.8125rem' }}>
+          <Link href="/tickets" className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1" style={{ fontSize: '0.8125rem' }}>
             전체 보기 <BsArrowRight size={12} />
-          </a>
+          </Link>
         </div>
         <div className="table-responsive">
           <table className="itsm-table">
@@ -680,7 +682,7 @@ function CustomerDashboard({ data }: { data: CustomerData }) {
           <div className="fw-semibold" style={{ fontSize: '0.9375rem', color: 'var(--text-primary)', padding: '0.75rem 1.25rem 0.5rem' }}>활성 프로젝트</div>
           <div>
             {projects.map((p, i) => (
-              <a
+              <Link
                 key={p.id}
                 href={`/tickets?projectId=${p.id}`}
                 className="d-flex justify-content-between align-items-center text-decoration-none"
@@ -698,7 +700,7 @@ function CustomerDashboard({ data }: { data: CustomerData }) {
                   <span className="ticket-number ms-2" style={{ fontSize: '0.75rem' }}>{p.code}</span>
                 </div>
                 <BsArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
-              </a>
+              </Link>
             ))}
           </div>
         </div>

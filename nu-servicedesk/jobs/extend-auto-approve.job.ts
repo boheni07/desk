@@ -9,8 +9,6 @@ import { BUSINESS_RULES } from '@/lib/constants';
 import { getHolidays } from './auto-receive.job';
 import {
   createNotification,
-  createNotificationsForUsers,
-  getSupervisorUserIds,
   getTicketAssigneeIds,
 } from '@/lib/notification-helper';
 
@@ -129,9 +127,9 @@ export async function processExtendAutoApprove(_job: Job): Promise<void> {
       });
 
       if (!existingWarning) {
-        const supervisorIds = await getSupervisorUserIds(req.ticketId);
-        if (supervisorIds.length > 0) {
-          await createNotificationsForUsers(supervisorIds, {
+        if (req.ticket.customerUserId) {
+          await createNotification({
+            userId: req.ticket.customerUserId,
             type: 'EXTEND_AUTO_APPROVE_SOON',
             title: '연기요청 자동승인 임박',
             body: `티켓 ${req.ticket.ticketNumber}의 연기요청이 ${BUSINESS_RULES.EXTEND_AUTO_APPROVE_HOURS - BUSINESS_RULES.EXTEND_AUTO_APPROVE_WARN_HOURS}시간 내 자동승인됩니다. 검토해 주세요.`,

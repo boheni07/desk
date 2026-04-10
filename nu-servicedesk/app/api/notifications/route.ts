@@ -8,6 +8,15 @@ import { logger } from '@/lib/logger';
 import { BUSINESS_RULES } from '@/lib/constants';
 import type { Prisma } from '@prisma/client';
 
+// Allowlist for notification type validation
+const VALID_NOTIFICATION_TYPES = new Set([
+  'TICKET_CREATED', 'TICKET_RECEIVED',
+  'EXTEND_REQUESTED', 'EXTEND_AUTO_APPROVE_SOON', 'EXTEND_APPROVED', 'EXTEND_REJECTED', 'EXTEND_AUTO_APPROVED',
+  'COMPLETE_REQUESTED', 'COMPLETE_APPROVED', 'COMPLETE_REJECTED', 'COMPLETE_2ND_REJECTED', 'COMPLETE_AUTO_APPROVED',
+  'COMMENT_CREATED', 'IN_PROGRESS_TRANSITION', 'SATISFACTION_REMINDER', 'DELAYED_TRANSITION', 'STALE_ESCALATION',
+  'PROJECT_DEACTIVATED', 'CUSTOMER_ZERO_WARNING', 'PROXY_APPROVAL_COMPLETED', 'BATCH_JOB_FAILED',
+]);
+
 /**
  * GET /api/notifications
  * List notifications for current user (paginated).
@@ -46,6 +55,12 @@ export async function GET(request: NextRequest) {
     }
 
     if (typeParam) {
+      if (!VALID_NOTIFICATION_TYPES.has(typeParam)) {
+        return NextResponse.json(
+          { success: false, error: { code: 'VALIDATION_ERROR', message: '유효하지 않은 알림 유형입니다.', status: 400 } },
+          { status: 400 },
+        );
+      }
       where.type = typeParam as Prisma.NotificationWhereInput['type'];
     }
 

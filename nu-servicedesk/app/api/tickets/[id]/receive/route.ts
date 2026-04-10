@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger';
 import { canTransition } from '@/lib/ticket-state-machine';
 import { TICKET_EVENTS } from '@/lib/ticket-constants';
 import { ERRORS } from '@/lib/errors';
+import { createNotification } from '@/lib/notification-helper';
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -36,16 +37,58 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
 
+    // Parse optional expectedCompletionDate from request body
+    let expectedCompletionDate: string | undefined;
+    try {
+      const body = await request.json();
+      if (body.expectedCompletionDate) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(body.expectedCompletionDate)) {
+          return NextResponse.json(
+            { success: false, error: { code: 'VALIDATION_ERROR', message: 'expectedCompletionDate 형식은 YYYY-MM-DD입니다.', status: 400 } },
+            { status: 400 },
+          );
+        }
+        expectedCompletionDate = body.expectedCompletionDate;
+      }
+    } catch {
+      // No body or invalid JSON — proceed without expectedCompletionDate
+    }
+
+    // Determine deadline value: provided expectedCompletionDate or ticket's desiredDate
+    let deadlineValue: Date | null = null;
+    if (expectedCompletionDate) {
+      deadlineValue = new Date(expectedCompletionDate);
+    } else {
+      const existing = await prisma.ticket.findUnique({
+        where: { id },
+        select: { desiredDate: true },
+      });
+      if (existing?.desiredDate) {
+        deadlineValue = existing.desiredDate;
+      }
+    }
+
     // Optimistic locking: atomic UPDATE with status check
     // Design Ref: §5.2 — $queryRaw RETURNING * pattern
-    const result = await prisma.$queryRaw<any[]>`
-      UPDATE tickets
-      SET status = 'RECEIVED'::"TicketStatus",
-          received_at = NOW(),
-          updated_at = NOW()
-      WHERE id = ${id} AND status = 'REGISTERED'::"TicketStatus"
-      RETURNING *
-    `;
+    const result = deadlineValue
+      ? await prisma.$queryRaw<any[]>`
+          UPDATE tickets
+          SET status = 'RECEIVED'::"TicketStatus",
+              received_at = NOW(),
+              deadline = ${deadlineValue},
+              expected_completion_date = ${deadlineValue},
+              updated_at = NOW()
+          WHERE id = ${id} AND status = 'REGISTERED'::"TicketStatus"
+          RETURNING *
+        `
+      : await prisma.$queryRaw<any[]>`
+          UPDATE tickets
+          SET status = 'RECEIVED'::"TicketStatus",
+              received_at = NOW(),
+              updated_at = NOW()
+          WHERE id = ${id} AND status = 'REGISTERED'::"TicketStatus"
+          RETURNING *
+        `;
 
     if (result.length === 0) {
       // Check current state
@@ -109,6 +152,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         },
       },
     });
+
+    // Send TICKET_RECEIVED notification to the person who created the ticket
+    if (ticket?.registeredById) {
+      createNotification({
+        userId: ticket.registeredById,
+        type: 'TICKET_RECEIVED',
+        title: '티켓이 접수되었습니다',
+        body: `[${ticket.ticketNumber}] 티켓이 접수 처리되었습니다.`,
+        ticketId: id,
+      }).catch(() => {}); // fire-and-forget
+    }
 
     return NextResponse.json({ success: true, data: ticket });
   } catch (error) {

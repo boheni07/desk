@@ -128,14 +128,14 @@ export default function HolidaysPage() {
     try {
       // Parse multi-line text: "YYYY-MM-DD 명칭"
       const lines = bulkText.trim().split('\n').filter(Boolean);
-      const holidays = lines.map((line) => {
+      const holidayEntries = lines.map((line) => {
         const parts = line.trim().split(/\s+/);
         const date = parts[0];
         const name = parts.slice(1).join(' ');
         return { date, name };
       }).filter((h) => h.date && h.name);
 
-      if (holidays.length === 0) {
+      if (holidayEntries.length === 0) {
         alert('올바른 형식으로 입력해 주세요.\n형식: YYYY-MM-DD 공휴일명');
         setBulkSaving(false);
         return;
@@ -144,14 +144,14 @@ export default function HolidaysPage() {
       const res = await fetch('/api/holidays', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ holidays }),
+        body: JSON.stringify({ holidays: holidayEntries }),
       });
       const json = await res.json();
       if (json.success) {
         setBulkResult(json.data);
         fetchHolidays();
       } else {
-        alert(json.error?.message || '��괄 등록에 실패했습니다.');
+        alert(json.error?.message || '일괄 등록에 실패했습니다.');
       }
     } catch {
       alert('서버에 연결할 수 없습니다.');
@@ -277,7 +277,7 @@ export default function HolidaysPage() {
             rows={8}
             value={bulkText}
             onChange={(e) => setBulkText(e.target.value)}
-            placeholder={`2026-01-01 ��정\n2026-01-28 설날 연휴\n2026-01-29 설날\n2026-01-30 ��날 연휴\n2026-03-01 삼일절\n2026-05-05 어린이날`}
+            placeholder={`2026-01-01 신정\n2026-01-28 설날 연휴\n2026-01-29 설날\n2026-01-30 설날 연휴\n2026-03-01 삼일절\n2026-05-05 어린이날`}
             className="font-monospace"
           />
           {bulkResult && (

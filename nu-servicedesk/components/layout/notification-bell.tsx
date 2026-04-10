@@ -41,8 +41,8 @@ export default function NotificationBell() {
     try {
       const res = await fetch('/api/notifications/unread-count');
       if (res.ok) {
-        const data = await res.json();
-        setUnreadCount(data.count ?? 0);
+        const json = await res.json();
+        setUnreadCount(json.data?.count ?? json.count ?? 0);
       }
     } catch {
       // Silently ignore polling errors
@@ -142,7 +142,8 @@ export default function NotificationBell() {
     <Dropdown show={isOpen} onToggle={setIsOpen} align="end">
       <Dropdown.Toggle
         variant="link"
-        className="position-relative p-2 text-dark border-0"
+        className="position-relative p-1 text-dark border-0 d-flex align-items-center justify-content-center"
+        style={{ width: 36, height: 36 }}
         id="notification-bell"
         aria-label="알림"
       >
@@ -160,7 +161,7 @@ export default function NotificationBell() {
         )}
       </Dropdown.Toggle>
 
-      <Dropdown.Menu style={{ width: '360px', maxHeight: '420px', overflow: 'auto' }}>
+      <Dropdown.Menu style={{ width: 'min(360px, calc(100vw - 1rem))', maxHeight: '420px', overflow: 'auto' }}>
         {/* Header */}
         <div className="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
           <strong>알림</strong>

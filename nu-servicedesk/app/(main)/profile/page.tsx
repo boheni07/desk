@@ -3,7 +3,7 @@
 // Design Ref: §4 — 내 정보 페이지 (Profile + Change Password link)
 // Plan SC: FR-30 프로필 관리
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Container from 'react-bootstrap/Container';
 import Card from 'react-bootstrap/Card';
@@ -60,6 +60,11 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => { if (savedTimerRef.current) clearTimeout(savedTimerRef.current); };
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -109,8 +114,8 @@ export default function ProfilePage() {
       if (json.success) {
         setProfile((prev) => prev ? { ...prev, ...json.data } : prev);
         setSaved(true);
-        // Clear saved status after 3s
-        setTimeout(() => setSaved(false), 3000);
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+        savedTimerRef.current = setTimeout(() => setSaved(false), 3000);
       } else {
         if (json.error?.fieldErrors) {
           setFieldErrors(json.error.fieldErrors);

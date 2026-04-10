@@ -16,6 +16,8 @@ function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;
   // Static assets and Next.js internals
   if (pathname.startsWith('/_next/') || pathname.startsWith('/favicon')) return true;
+  // Local file upload endpoint (dev: replaces R2 presigned PUT)
+  if (pathname.startsWith('/api/attachments/local-upload')) return true;
   return false;
 }
 
@@ -85,15 +87,20 @@ export async function middleware(request: NextRequest) {
   // Falls back to request host if NEXT_PUBLIC_APP_URL is not configured (never skips check)
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) && pathname.startsWith('/api/')) {
     const origin = request.headers.get('origin');
-    if (origin) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL
-        ?? `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-      if (origin !== appUrl) {
-        return NextResponse.json(
-          { success: false, error: { code: 'CSRF_REJECTED', message: '요청 출처가 유효하지 않습니다.', status: 403 } },
-          { status: 403 },
-        );
-      }
+    const referer = request.headers.get('referer');
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+      ?? `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+    if (!origin && !referer) {
+      return NextResponse.json(
+        { success: false, error: { code: 'CSRF_REJECTED', message: '요청 출처가 유효하지 않습니다.', status: 403 } },
+        { status: 403 },
+      );
+    }
+    if (origin && origin !== appUrl) {
+      return NextResponse.json(
+        { success: false, error: { code: 'CSRF_REJECTED', message: '요청 출처가 유효하지 않습니다.', status: 403 } },
+        { status: 403 },
+      );
     }
   }
 

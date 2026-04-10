@@ -72,7 +72,15 @@ export default function SystemSettingsPage() {
   useEffect(() => { fetchSession(); }, [fetchSession]);
   useEffect(() => { fetchSupervisors(); fetchCandidates(); }, [fetchSupervisors, fetchCandidates]);
 
-  if (userType && userType !== 'admin') {
+  if (!userType) {
+    return (
+      <Container fluid className="text-center py-5">
+        <Spinner animation="border" variant="primary" style={{ width: '1.5rem', height: '1.5rem' }} />
+      </Container>
+    );
+  }
+
+  if (userType !== 'admin') {
     return (
       <Container fluid>
         <Alert variant="danger" className="mt-3">

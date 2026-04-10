@@ -32,10 +32,10 @@ async function checkRateLimit(ip: string): Promise<boolean> {
 
 async function incrementRateLimit(ip: string): Promise<void> {
   const key = `${RATE_LIMIT_PREFIX}${ip}`;
-  const result = await redis.incr(key);
-  if (result === 1) {
-    await redis.expire(key, RATE_LIMIT_WINDOW);
-  }
+  const pipeline = redis.pipeline();
+  pipeline.incr(key);
+  pipeline.expire(key, RATE_LIMIT_WINDOW, 'NX');
+  await pipeline.exec();
 }
 
 function getClientIP(request: NextRequest): string {

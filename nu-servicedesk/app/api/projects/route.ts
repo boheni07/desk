@@ -64,8 +64,10 @@ export async function GET(request: NextRequest) {
       where.isActive = isActive === 'true';
     }
 
-    // RBAC: customer sees only their assigned projects
-    if (session.type === 'customer') {
+    // RBAC: customer always sees only their assigned projects
+    // support/admin with myProjects=true also filters to assigned projects only
+    const myProjects = searchParams.get('myProjects');
+    if (session.type === 'customer' || myProjects === 'true') {
       where.members = {
         some: { userId: session.userId },
       };

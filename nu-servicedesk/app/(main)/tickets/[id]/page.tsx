@@ -16,10 +16,9 @@ import Form from 'react-bootstrap/Form';
 import {
   BsArrowLeft, BsPersonPlus, BsXCircle, BsStarFill, BsStar,
   BsClockHistory, BsCheckCircle, BsXCircleFill, BsArrowRepeat,
-  BsShieldLock,
+  BsShieldLock, BsPaperclip, BsFileImage, BsDownload,
 } from 'react-icons/bs';
 import CommentList from '@/components/tickets/comment-list';
-import AttachmentList from '@/components/tickets/attachment-list';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PriorityBadge } from '@/components/ui/priority-badge';
 import type { TicketStatus, TicketPriority } from '@prisma/client';
@@ -568,25 +567,58 @@ export default function TicketDetailPage() {
       <Row>
         {/* Left Column: Content + Attachments + Comments */}
         <Col lg={8}>
-          {/* Content */}
+          {/* Content + Attachments inline */}
           <div className="detail-section">
             <div className="detail-section-header">
               <span className="detail-section-title">내용</span>
             </div>
             <div className="detail-section-body">
               <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', lineHeight: 1.7, color: 'var(--text-primary)' }}>{ticket.content}</div>
+
+              {/* 첨부파일: 내용 바로 아래 인라인 표시 */}
+              {ticket.attachments && ticket.attachments.length > 0 && (
+                <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+                  <div className="d-flex align-items-center gap-1 mb-2">
+                    <BsPaperclip style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }} />
+                    <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)' }}>첨부파일 {ticket.attachments.length}건</span>
+                  </div>
+                  <div className="d-flex flex-wrap gap-2">
+                    {ticket.attachments.map((a: { id: string; fileName: string; fileSize: number; mimeType: string; uploader?: { name: string } | null }) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        className="d-flex align-items-center gap-2"
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: 6,
+                          border: '1px solid #dee2e6',
+                          background: '#f8f9fa',
+                          color: '#495057',
+                          cursor: 'pointer',
+                          fontSize: '0.8rem',
+                          transition: 'background 100ms ease',
+                        }}
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(`/api/attachments/${a.id}`);
+                            const json = await res.json();
+                            if (json.success) window.open(json.data.downloadUrl, '_blank');
+                          } catch { /* ignore */ }
+                        }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#e9ecef'; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = '#f8f9fa'; }}
+                      >
+                        {a.mimeType?.startsWith('image/') ? <BsFileImage style={{ color: '#2F9E44', flexShrink: 0 }} /> : <BsPaperclip style={{ color: '#868e96', flexShrink: 0 }} />}
+                        <span className="text-truncate" style={{ maxWidth: 180 }}>{a.fileName}</span>
+                        <span style={{ fontSize: '0.68rem', color: '#adb5bd' }}>{a.fileSize < 1024 * 1024 ? `${(a.fileSize / 1024).toFixed(0)}KB` : `${(a.fileSize / 1024 / 1024).toFixed(1)}MB`}</span>
+                        <BsDownload style={{ fontSize: '0.7rem', color: '#868e96', flexShrink: 0 }} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-
-          {/* Attachments (Module 9A) */}
-          {session && (
-            <AttachmentList
-              ticketId={ticketId}
-              currentUserId={session.userId}
-              currentUserRole={session.type}
-              readOnly
-            />
-          )}
 
           {/* Comments (Module 8) */}
           {session && (
@@ -612,7 +644,7 @@ export default function TicketDetailPage() {
                 { label: '카테고리', value: ticket.category.name },
                 { label: '등록자', value: ticket.registeredBy.name },
                 { label: '담당자', value: ticket.assignments.length > 0 ? ticket.assignments.map((a) => a.user.name).join(', ') : '-' },
-                { label: '처리희망일', value: formatDate(ticket.desiredDate) },
+                { label: '처리희망일', value: ticket.desiredDate ? formatDate(ticket.desiredDate) : '-' },
                 ...(ticket.deadline ? [{ label: '처리기한', value: formatDateTime(ticket.deadline), danger: true }] : []),
                 ...(ticket.receivedAt ? [{ label: '접수일시', value: formatDateTime(ticket.receivedAt) }] : []),
                 { label: '등록일시', value: formatDateTime(ticket.createdAt) },
@@ -629,121 +661,111 @@ export default function TicketDetailPage() {
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* ── 작업 + 상태 이력 통합 섹션 ── */}
           <div className="detail-section mb-3">
             <div className="detail-section-header">
-              <span className="detail-section-title">작업</span>
+              <span className="detail-section-title"><BsClockHistory className="me-1" size={13} />작업 · 상태 이력</span>
+              <StatusBadge status={ticket.status as TicketStatus} size="sm" />
             </div>
-            <div className="detail-section-body d-flex flex-column gap-2">
-              {/* Support: 접수 (REGISTERED -> RECEIVED) */}
-              {isStaff && ticket.status === 'REGISTERED' && (
-                <Button
-                  variant="primary"
-                  onClick={handleReceive}
-                  disabled={!!actionLoading}
-                >
-                  {actionLoading === 'receive' ? <Spinner size="sm" animation="border" /> : '접수'}
-                </Button>
-              )}
+            <div className="detail-section-body">
+              {/* ── 현재 상태에서 가능한 작업 버튼 ── */}
+              {(() => {
+                const actions: { key: string; label: string; icon: React.ReactNode; variant: string; onClick: () => void; show: boolean }[] = [
+                  // 접수 (REGISTERED → RECEIVED)
+                  { key: 'receive', label: '접수', icon: null, variant: 'primary',
+                    onClick: handleReceive,
+                    show: isStaff && ticket.status === 'REGISTERED' },
+                  // 처리 시작 (RECEIVED/DELAYED → IN_PROGRESS)
+                  { key: 'confirm', label: '처리 시작', icon: null, variant: 'success',
+                    onClick: handleConfirm,
+                    show: isStaff && (ticket.status === 'RECEIVED' || ticket.status === 'DELAYED') },
+                  // 연기 요청 (IN_PROGRESS/DELAYED → EXTEND_REQUESTED)
+                  { key: 'extend', label: '연기 요청', icon: null, variant: 'outline-warning',
+                    onClick: () => setShowExtendRequestModal(true),
+                    show: isSupport && (ticket.status === 'IN_PROGRESS' || ticket.status === 'DELAYED') },
+                  // 완료 요청 (IN_PROGRESS/DELAYED → COMPLETE_REQUESTED)
+                  { key: 'complete', label: '완료 요청', icon: null, variant: 'outline-primary',
+                    onClick: () => setShowCompleteRequestModal(true),
+                    show: isStaff && (ticket.status === 'IN_PROGRESS' || ticket.status === 'DELAYED') },
+                  // 담당자 배정
+                  { key: 'assign', label: '담당자 배정', icon: <BsPersonPlus className="me-1" size={13} />, variant: 'outline-secondary',
+                    onClick: openAssignModal,
+                    show: isAdmin && !['CLOSED', 'CANCELLED'].includes(ticket.status) },
+                  // 취소
+                  { key: 'cancel', label: '취소', icon: <BsXCircle className="me-1" size={13} />, variant: 'outline-danger',
+                    onClick: () => setShowCancelModal(true),
+                    show: isAdmin && ['REGISTERED', 'RECEIVED', 'IN_PROGRESS', 'DELAYED', 'EXTEND_REQUESTED'].includes(ticket.status) },
+                  // 만족도 평가
+                  { key: 'rate', label: '만족도 평가', icon: <BsStarFill className="me-1" size={13} />, variant: 'warning',
+                    onClick: () => setShowRateModal(true),
+                    show: isCustomer && ticket.status === 'SATISFACTION_PENDING' && !ticket.satisfactionRating?.rating },
+                ];
 
-              {/* Support: 처리 시작 (RECEIVED -> IN_PROGRESS) */}
-              {isStaff && ticket.status === 'RECEIVED' && (
-                <Button
-                  variant="success"
-                  onClick={handleConfirm}
-                  disabled={!!actionLoading}
-                >
-                  {actionLoading === 'confirm' ? <Spinner size="sm" animation="border" /> : '처리 시작'}
-                </Button>
-              )}
+                const visibleActions = actions.filter(a => a.show);
 
-              {/* Support: 연기 요청 (IN_PROGRESS / DELAYED) */}
-              {isSupport && (ticket.status === 'IN_PROGRESS' || ticket.status === 'DELAYED') && (
-                <Button
-                  variant="outline-warning"
-                  onClick={() => setShowExtendRequestModal(true)}
-                  disabled={!!actionLoading}
-                >
-                  연기 요청
-                </Button>
-              )}
+                if (visibleActions.length === 0 && !['CLOSED', 'CANCELLED'].includes(ticket.status) && !ticket.satisfactionRating?.rating) {
+                  return null; // 연기/완료 승인 등은 아래 섹션에서 별도 처리
+                }
 
-              {/* Support/Admin: 완료 요청 (IN_PROGRESS / DELAYED) */}
-              {isStaff && (ticket.status === 'IN_PROGRESS' || ticket.status === 'DELAYED') && (
-                <Button
-                  variant="outline-primary"
-                  onClick={() => setShowCompleteRequestModal(true)}
-                  disabled={!!actionLoading}
-                >
-                  완료 요청
-                </Button>
-              )}
+                return (
+                  <>
+                    {visibleActions.length > 0 && (
+                      <div className="d-flex flex-wrap gap-2 mb-3">
+                        {visibleActions.map((a) => (
+                          <Button
+                            key={a.key}
+                            variant={a.variant}
+                            size="sm"
+                            onClick={a.onClick}
+                            disabled={!!actionLoading}
+                          >
+                            {actionLoading === a.key
+                              ? <Spinner size="sm" animation="border" />
+                              : <>{a.icon}{a.label}</>}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
 
-              {/* Admin: 담당자 배정 */}
-              {isAdmin && !['CLOSED', 'CANCELLED'].includes(ticket.status) && (
-                <Button variant="outline-secondary" onClick={openAssignModal}>
-                  <BsPersonPlus className="me-1" />담당자 배정
-                </Button>
-              )}
+                    {/* 만족도 표시 */}
+                    {ticket.satisfactionRating?.rating !== null && ticket.satisfactionRating?.rating !== undefined && (
+                      <div className="d-flex align-items-center gap-2 mb-3 px-2 py-2 rounded-2" style={{ background: 'rgba(255,193,7,0.08)' }}>
+                        <div>
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            star <= (ticket.satisfactionRating?.rating ?? 0)
+                              ? <BsStarFill key={star} className="text-warning" size={14} />
+                              : <BsStar key={star} className="text-muted" size={14} />
+                          ))}
+                        </div>
+                        <small className="text-muted">
+                          {ticket.satisfactionRating?.rating}점
+                          {ticket.satisfactionRating?.comment && ` — ${ticket.satisfactionRating.comment}`}
+                        </small>
+                      </div>
+                    )}
 
-              {/* Admin: 취소 */}
-              {isAdmin && !['COMPLETE_REQUESTED', 'SATISFACTION_PENDING', 'CLOSED', 'CANCELLED'].includes(ticket.status) && (
-                <Button variant="outline-danger" onClick={() => setShowCancelModal(true)}>
-                  <BsXCircle className="me-1" />취소
-                </Button>
-              )}
+                    {ticket.status === 'CLOSED' && !ticket.satisfactionRating?.rating && (
+                      <div className="text-muted small mb-3 px-2">종료됨 (자동종료)</div>
+                    )}
+                    {ticket.status === 'CANCELLED' && (
+                      <div className="text-muted small mb-3 px-2">취소됨</div>
+                    )}
+                  </>
+                );
+              })()}
 
-              {/* Customer: 만족도 평가 */}
-              {isCustomer && ticket.status === 'SATISFACTION_PENDING' && ticket.satisfactionRating?.rating === null && (
-                <Button variant="warning" onClick={() => setShowRateModal(true)}>
-                  <BsStarFill className="me-1" />만족도 평가
-                </Button>
-              )}
-
-              {/* Already rated display */}
-              {ticket.satisfactionRating?.rating !== null && ticket.satisfactionRating?.rating !== undefined && (
-                <div className="text-center">
-                  <div className="mb-1">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      star <= (ticket.satisfactionRating?.rating ?? 0)
-                        ? <BsStarFill key={star} className="text-warning" />
-                        : <BsStar key={star} className="text-muted" />
-                    ))}
-                  </div>
-                  <small className="text-muted">
-                    {ticket.satisfactionRating?.rating}점
-                    {ticket.satisfactionRating?.comment && ` -- ${ticket.satisfactionRating.comment}`}
-                  </small>
-                </div>
-              )}
-
-              {ticket.status === 'CLOSED' && !ticket.satisfactionRating?.rating && (
-                <div className="text-center text-muted small">종료됨 (자동종료)</div>
-              )}
-
-              {ticket.status === 'CANCELLED' && (
-                <div className="text-center text-muted small">취소됨</div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Module 9C: Status History Timeline ── */}
-          <div className="detail-section mb-3">
-            <div className="detail-section-header">
-              <span className="detail-section-title"><BsClockHistory className="me-1" size={13} />상태 이력</span>
-            </div>
-            <div className="detail-section-body p-0">
+              {/* ── 상태 이력 타임라인 ── */}
               {ticket.statusHistory.length === 0 ? (
-                <p className="text-muted text-center p-3 mb-0">이력이 없습니다.</p>
+                <p className="text-muted text-center py-2 mb-0 small">상태 이력이 없습니다.</p>
               ) : (
-                <div className="position-relative ps-4 py-3 pe-3">
+                <div className="position-relative ps-4 pe-2" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
                   {/* Vertical timeline line */}
                   <div
-                    className="position-absolute bg-light"
-                    style={{ left: '1.5rem', top: '1rem', bottom: '1rem', width: '2px' }}
+                    className="position-absolute"
+                    style={{ left: '1.5rem', top: '0.75rem', bottom: '0', width: '2px', background: 'var(--border-subtle)' }}
                   />
                   {ticket.statusHistory.map((h, idx) => (
-                    <div key={h.id} className={`d-flex gap-2 ${idx > 0 ? 'mt-3' : ''}`}>
+                    <div key={h.id} className={`d-flex gap-2 ${idx > 0 ? 'mt-2' : ''}`}>
                       {/* Timeline dot */}
                       <div className="position-relative flex-shrink-0" style={{ width: 0 }}>
                         <div
@@ -759,20 +781,20 @@ export default function TicketDetailPage() {
                       </div>
                       <div className="flex-grow-1 ms-2">
                         <div className="d-flex align-items-center gap-1">
-                          <span className={`badge bg-${STATUS_COLORS[h.previousStatus] || 'secondary'}`} style={{ fontSize: '0.65rem' }}>
+                          <span className={`badge bg-${STATUS_COLORS[h.previousStatus] || 'secondary'}`} style={{ fontSize: '0.6rem', opacity: 0.7 }}>
                             {STATUS_LABELS[h.previousStatus] || h.previousStatus}
                           </span>
-                          <span className="text-muted" style={{ fontSize: '0.7rem' }}>→</span>
-                          <span className={`badge bg-${STATUS_COLORS[h.newStatus] || 'secondary'}`} style={{ fontSize: '0.65rem' }}>
+                          <span className="text-muted" style={{ fontSize: '0.65rem' }}>→</span>
+                          <span className={`badge bg-${STATUS_COLORS[h.newStatus] || 'secondary'}`} style={{ fontSize: '0.6rem' }}>
                             {STATUS_LABELS[h.newStatus] || h.newStatus}
                           </span>
+                          <span className="text-muted" style={{ fontSize: '0.65rem', marginLeft: 'auto' }}>
+                            {formatDateTime(h.createdAt)}
+                          </span>
                         </div>
-                        {h.reason && (
-                          <div className="small text-muted mt-1">{h.reason}</div>
-                        )}
                         <div className="text-muted" style={{ fontSize: '0.7rem' }}>
                           {h.actorType === 'SYSTEM' ? '시스템' : h.actor?.name || '-'}
-                          {' '}&middot;{' '}{formatDateTime(h.createdAt)}
+                          {h.reason && <> — {h.reason}</>}
                         </div>
                       </div>
                     </div>
@@ -903,7 +925,7 @@ export default function TicketDetailPage() {
       </Row>
 
       {/* Cancel Modal */}
-      <Modal show={showCancelModal} onHide={() => setShowCancelModal(false)} centered>
+      <Modal show={showCancelModal} onHide={() => { setShowCancelModal(false); setCancelReason(''); }} centered>
         <Modal.Header closeButton>
           <Modal.Title>티켓 취소</Modal.Title>
         </Modal.Header>
@@ -921,7 +943,7 @@ export default function TicketDetailPage() {
           </Form.Group>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowCancelModal(false)}>닫기</Button>
+          <Button variant="secondary" onClick={() => { setShowCancelModal(false); setCancelReason(''); }}>닫기</Button>
           <Button
             variant="danger"
             onClick={handleCancel}
@@ -1010,7 +1032,7 @@ export default function TicketDetailPage() {
       </Modal>
 
       {/* Extend Reject Modal */}
-      <Modal show={showExtendRejectModal} onHide={() => { setShowExtendRejectModal(false); setExtendActionId(null); }} centered>
+      <Modal show={showExtendRejectModal} onHide={() => { setShowExtendRejectModal(false); setExtendActionId(null); setExtendRejectReason(''); }} centered>
         <Modal.Header closeButton>
           <Modal.Title>연기요청 반려</Modal.Title>
         </Modal.Header>
@@ -1111,7 +1133,7 @@ export default function TicketDetailPage() {
       </Modal>
 
       {/* Complete Reject Modal */}
-      <Modal show={showCompleteRejectModal} onHide={() => { setShowCompleteRejectModal(false); setCompleteActionId(null); }} centered>
+      <Modal show={showCompleteRejectModal} onHide={() => { setShowCompleteRejectModal(false); setCompleteActionId(null); setCompleteRejectReason(''); }} centered>
         <Modal.Header closeButton>
           <Modal.Title>완료요청 반려</Modal.Title>
         </Modal.Header>

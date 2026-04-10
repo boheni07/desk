@@ -12,6 +12,7 @@ import Badge from 'react-bootstrap/Badge';
 import Nav from 'react-bootstrap/Nav';
 import Pagination from 'react-bootstrap/Pagination';
 import Spinner from 'react-bootstrap/Spinner';
+import Alert from 'react-bootstrap/Alert';
 import {
   BsTrash,
   BsCheckAll,
@@ -61,10 +62,13 @@ export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   const fetchNotifications = useCallback(
     async (page: number, tab: TabKey) => {
       setIsLoading(true);
+      setFetchError(null);
       try {
         const params = new URLSearchParams();
         params.set('page', String(page));
@@ -83,9 +87,11 @@ export default function NotificationsPage() {
           const data = await res.json();
           setNotifications(data.data ?? []);
           setPagination(data.pagination ?? { page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 });
+        } else {
+          setFetchError('알림을 불러오는데 실패했습니다.');
         }
       } catch {
-        // ignore
+        setFetchError('서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.');
       } finally {
         setIsLoading(false);
       }
@@ -139,10 +145,20 @@ export default function NotificationsPage() {
   // Delete notification
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    const res = await fetch(`/api/notifications/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-      setPagination((prev) => ({ ...prev, total: prev.total - 1 }));
+    if (deletingIds.has(id)) return;
+    setDeletingIds((prev) => new Set(prev).add(id));
+    try {
+      const res = await fetch(`/api/notifications/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+        setPagination((prev) => ({ ...prev, total: prev.total - 1 }));
+      }
+    } finally {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -245,12 +261,19 @@ export default function NotificationsPage() {
         ))}
       </Nav>
 
+      {/* Error state */}
+      {fetchError && (
+        <Alert variant="danger" dismissible onClose={() => setFetchError(null)}>
+          {fetchError}
+        </Alert>
+      )}
+
       {/* Notification list */}
       {isLoading ? (
         <div className="text-center py-5">
           <Spinner animation="border" variant="primary" />
         </div>
-      ) : notifications.length === 0 ? (
+      ) : notifications.length === 0 && !fetchError ? (
         <Card body className="text-center text-muted py-5">
           알림이 없습니다.
         </Card>
@@ -308,9 +331,14 @@ export default function NotificationsPage() {
                   <button
                     className="btn btn-sm btn-outline-danger border-0 p-1"
                     onClick={(e) => handleDelete(e, n.id)}
+                    disabled={deletingIds.has(n.id)}
                     title="삭제"
                   >
-                    <BsTrash size={14} />
+                    {deletingIds.has(n.id) ? (
+                      <Spinner animation="border" size="sm" style={{ width: 14, height: 14 }} />
+                    ) : (
+                      <BsTrash size={14} />
+                    )}
                   </button>
                 </div>
               </div>

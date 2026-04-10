@@ -6,15 +6,17 @@ import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/session';
 import { logger } from '@/lib/logger';
 import { ERRORS } from '@/lib/errors';
+import { BUSINESS_RULES } from '@/lib/constants';
+import { addBusinessDays } from '@/lib/business-hours';
+import { createNotification } from '@/lib/notification-helper';
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 /**
- * POST /api/tickets/[id]/confirm — 처리 시작 (RECEIVED -> IN_PROGRESS)
+ * POST /api/tickets/[id]/confirm — 처리 시작 (RECEIVED/DELAYED -> IN_PROGRESS)
  * support/admin only. Uses optimistic locking.
  *
  * V2.0 spec:
- * - If ticket is DELAYED (batch already transitioned): 409 TICKET_ALREADY_DELAYED
  * - If ticket is already IN_PROGRESS: 204 No Content (idempotent)
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
@@ -36,14 +38,39 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
 
-    // Optimistic locking: try to transition from RECEIVED to IN_PROGRESS
-    const result = await prisma.$queryRaw<any[]>`
-      UPDATE tickets
-      SET status = 'IN_PROGRESS'::"TicketStatus",
-          updated_at = NOW()
-      WHERE id = ${id} AND status = 'RECEIVED'::"TicketStatus"
-      RETURNING *
-    `;
+    // Check current ticket state first to determine if deadline needs renewal
+    const currentTicket = await prisma.ticket.findUnique({
+      where: { id },
+      select: { status: true, deadline: true },
+    });
+
+    const isFromDelayed = currentTicket?.status === 'DELAYED';
+
+    // Optimistic locking: try to transition from RECEIVED or DELAYED to IN_PROGRESS
+    // When transitioning from DELAYED, extend deadline by +5 business days from now
+    // to prevent delay-detect batch from immediately reverting to DELAYED
+    const result = isFromDelayed
+      ? await (async () => {
+          const holidays = await prisma.holiday.findMany({ select: { date: true } });
+          const holidayDates = holidays.map(h => h.date);
+          const newDeadline = addBusinessDays(new Date(), BUSINESS_RULES.DESIRED_DATE_DEFAULT_DAYS, holidayDates);
+          return prisma.$queryRaw<any[]>`
+            UPDATE tickets
+            SET status = 'IN_PROGRESS'::"TicketStatus",
+                deadline = ${newDeadline},
+                expected_completion_date = ${newDeadline},
+                updated_at = NOW()
+            WHERE id = ${id} AND status = 'DELAYED'::"TicketStatus"
+            RETURNING *
+          `;
+        })()
+      : await prisma.$queryRaw<any[]>`
+          UPDATE tickets
+          SET status = 'IN_PROGRESS'::"TicketStatus",
+              updated_at = NOW()
+          WHERE id = ${id} AND status = 'RECEIVED'::"TicketStatus"
+          RETURNING *
+        `;
 
     if (result.length === 0) {
       // Conflict — check current state for appropriate response
@@ -59,12 +86,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      // V2.0 spec: already DELAYED -> 409
-      if (ticket.status === 'DELAYED') {
-        const err = ERRORS.TICKET_ALREADY_DELAYED();
-        return NextResponse.json(err.toResponse(), { status: err.status });
-      }
-
       // Already IN_PROGRESS -> 204 idempotent
       if (ticket.status === 'IN_PROGRESS') {
         return new NextResponse(null, { status: 204 });
@@ -76,15 +97,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Determine the previous status
+    const prevStatus = isFromDelayed ? 'DELAYED' : 'RECEIVED';
+
     // Record status history
     await prisma.ticketStatusHistory.create({
       data: {
         ticketId: id,
-        previousStatus: 'RECEIVED',
+        previousStatus: prevStatus,
         newStatus: 'IN_PROGRESS',
         actorId: session.userId,
         actorType: 'USER',
-        reason: '처리 시작',
+        reason: isFromDelayed ? '지연 상태에서 처리 재개 (처리기한 자동 연장)' : '처리 시작',
       },
     });
 
@@ -98,6 +122,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         },
       },
     });
+
+    // Send IN_PROGRESS_TRANSITION notification to the customer who registered the ticket
+    if (ticket?.customerUserId) {
+      createNotification({
+        userId: ticket.customerUserId,
+        type: 'IN_PROGRESS_TRANSITION',
+        title: '티켓 처리가 시작되었습니다',
+        body: `[${ticket.ticketNumber}] 티켓이 처리중 상태로 전환되었습니다.`,
+        ticketId: id,
+      }).catch(() => {}); // fire-and-forget
+    }
 
     return NextResponse.json({ success: true, data: ticket });
   } catch (error) {

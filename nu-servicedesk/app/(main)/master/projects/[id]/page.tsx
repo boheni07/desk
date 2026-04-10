@@ -141,7 +141,7 @@ export default function ProjectDetailPage() {
     const supports = project.members.filter((m) => m.role === 'support').map((m) => m.userId);
     setSelectedSupports([...mainSupports, ...supports]);
     setSelectedCustomers(project.members.filter((m) => m.role === 'customer').map((m) => m.userId));
-  }, [project?.id]);
+  }, [project]);
 
   const toggleCustomer = (userId: string) => {
     setSelectedCustomers((prev) =>
@@ -389,75 +389,123 @@ export default function ProjectDetailPage() {
               </span>
             </div>
             <div className="detail-section-body">
-              {/* 고객담당자 */}
-              <Form.Group className="mb-4">
-                <Form.Label className="fw-semibold d-flex align-items-center gap-2" style={{ fontSize: '0.875rem' }}>
-                  고객담당자
-                  {selectedCustomers.length > 0 && (
-                    <span className="badge" style={{ background: 'rgba(59,91,219,0.1)', color: 'var(--brand-primary)', fontSize: '0.72rem', fontWeight: 600 }}>
-                      {selectedCustomers.length}명 선택
-                    </span>
-                  )}
-                </Form.Label>
-                {loadingCustomers ? (
-                  <div className="text-muted small py-1"><Spinner size="sm" animation="border" className="me-1" />불러오는 중...</div>
-                ) : customerUsers.length === 0 ? (
-                  <div className="text-muted small py-1">해당 고객사에 등록된 고객담당자가 없습니다.</div>
-                ) : (
-                  <div className="member-toggle">
-                    {customerUsers.map((u) => {
-                      const selected = selectedCustomers.includes(u.id);
-                      return (
-                        <button
-                          key={u.id}
-                          type="button"
-                          className={`member-toggle-btn${selected ? ' selected' : ''}`}
-                          onClick={() => toggleCustomer(u.id)}
-                        >
-                          {u.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                <Form.Text className="text-muted">여러 명 선택 가능합니다.</Form.Text>
-              </Form.Group>
+              <Row>
+                {/* 좌측: 고객담당자 */}
+                <Col md={6} style={{ borderRight: '1px solid var(--border-subtle)' }} className="pe-md-4 mb-4 mb-md-0">
+                  <Form.Group>
+                    <Form.Label className="fw-semibold d-flex align-items-center gap-2 mb-3" style={{ fontSize: '0.875rem' }}>
+                      <span style={{ display: 'inline-block', width: 3, height: 14, borderRadius: 2, background: '#2F9E44', marginRight: 4 }} />
+                      고객담당자
+                      {selectedCustomers.length > 0 && (
+                        <span className="badge" style={{ background: 'rgba(47,158,68,0.1)', color: '#2F9E44', fontSize: '0.72rem', fontWeight: 600 }}>
+                          {selectedCustomers.length}명 선택
+                        </span>
+                      )}
+                    </Form.Label>
+                    {loadingCustomers ? (
+                      <div className="text-muted small py-2"><Spinner size="sm" animation="border" className="me-1" />불러오는 중...</div>
+                    ) : customerUsers.length === 0 ? (
+                      <div className="text-muted small py-2">해당 고객사에 등록된 고객담당자가 없습니다.</div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                        {customerUsers.map((u) => {
+                          const selected = selectedCustomers.includes(u.id);
+                          return (
+                            <button
+                              key={u.id}
+                              type="button"
+                              className="d-flex align-items-center text-start border rounded-2 px-3 py-2"
+                              style={{
+                                background: selected ? 'rgba(47,158,68,0.08)' : 'transparent',
+                                borderColor: selected ? '#2F9E44' : 'var(--border-subtle)',
+                                color: selected ? '#2F9E44' : 'var(--text-primary)',
+                                fontWeight: selected ? 600 : 400,
+                                fontSize: '0.8125rem',
+                                cursor: 'pointer',
+                                transition: 'all 150ms ease',
+                              }}
+                              onClick={() => toggleCustomer(u.id)}
+                            >
+                              <span style={{
+                                width: 28, height: 28, borderRadius: '50%',
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                background: selected ? '#2F9E44' : 'var(--surface-alt)',
+                                color: selected ? '#fff' : 'var(--text-muted)',
+                                fontSize: '0.75rem', fontWeight: 600, marginRight: 10, flexShrink: 0,
+                              }}>
+                                {u.name.charAt(0)}
+                              </span>
+                              <span className="flex-grow-1">{u.name}</span>
+                              {selected && <span style={{ fontSize: '0.875rem', color: '#2F9E44' }}>✓</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <Form.Text className="text-muted mt-2 d-block">여러 명 선택 가능합니다.</Form.Text>
+                  </Form.Group>
+                </Col>
 
-              {/* 지원담당자 */}
-              <Form.Group className="mb-2">
-                <Form.Label className="fw-semibold d-flex align-items-center gap-2" style={{ fontSize: '0.875rem' }}>
-                  지원담당자 <span className="text-danger">*</span>
-                  {selectedSupports.length > 0 && (
-                    <span className="badge" style={{ background: 'rgba(124,58,237,0.1)', color: '#7C3AED', fontSize: '0.72rem', fontWeight: 600 }}>
-                      {selectedSupports.length}명 선택
-                    </span>
-                  )}
-                </Form.Label>
-                {loadingSupports ? (
-                  <div className="text-muted small py-1"><Spinner size="sm" animation="border" className="me-1" />불러오는 중...</div>
-                ) : supportUsers.length === 0 ? (
-                  <div className="text-muted small py-1">등록된 지원담당자가 없습니다.</div>
-                ) : (
-                  <div className="member-toggle">
-                    {supportUsers.map((u) => {
-                      const selected = selectedSupports.includes(u.id);
-                      const isMain = selectedSupports[0] === u.id;
-                      return (
-                        <button
-                          key={u.id}
-                          type="button"
-                          className={`member-toggle-btn${selected ? (isMain ? ' main-selected' : ' selected') : ''}`}
-                          onClick={() => toggleSupport(u.id)}
-                        >
-                          {u.name}
-                          {isMain && <span style={{ fontSize: '0.65rem', opacity: 0.85, marginLeft: 3 }}>Main</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                <Form.Text className="text-muted">처음 선택한 담당자가 Main 담당자로 지정됩니다.</Form.Text>
-              </Form.Group>
+                {/* 우측: 지원담당자 */}
+                <Col md={6} className="ps-md-4">
+                  <Form.Group>
+                    <Form.Label className="fw-semibold d-flex align-items-center gap-2 mb-3" style={{ fontSize: '0.875rem' }}>
+                      <span style={{ display: 'inline-block', width: 3, height: 14, borderRadius: 2, background: '#7C3AED', marginRight: 4 }} />
+                      지원담당자 <span className="text-danger">*</span>
+                      {selectedSupports.length > 0 && (
+                        <span className="badge" style={{ background: 'rgba(124,58,237,0.1)', color: '#7C3AED', fontSize: '0.72rem', fontWeight: 600 }}>
+                          {selectedSupports.length}명 선택
+                        </span>
+                      )}
+                    </Form.Label>
+                    {loadingSupports ? (
+                      <div className="text-muted small py-2"><Spinner size="sm" animation="border" className="me-1" />불러오는 중...</div>
+                    ) : supportUsers.length === 0 ? (
+                      <div className="text-muted small py-2">등록된 지원담당자가 없습니다.</div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                        {supportUsers.map((u) => {
+                          const selected = selectedSupports.includes(u.id);
+                          const isMain = selectedSupports[0] === u.id;
+                          return (
+                            <button
+                              key={u.id}
+                              type="button"
+                              className="d-flex align-items-center text-start border rounded-2 px-3 py-2"
+                              style={{
+                                background: selected ? (isMain ? 'rgba(124,58,237,0.12)' : 'rgba(124,58,237,0.06)') : 'transparent',
+                                borderColor: selected ? '#7C3AED' : 'var(--border-subtle)',
+                                color: selected ? '#7C3AED' : 'var(--text-primary)',
+                                fontWeight: selected ? 600 : 400,
+                                fontSize: '0.8125rem',
+                                cursor: 'pointer',
+                                transition: 'all 150ms ease',
+                              }}
+                              onClick={() => toggleSupport(u.id)}
+                            >
+                              <span style={{
+                                width: 28, height: 28, borderRadius: '50%',
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                background: selected ? '#7C3AED' : 'var(--surface-alt)',
+                                color: selected ? '#fff' : 'var(--text-muted)',
+                                fontSize: '0.75rem', fontWeight: 600, marginRight: 10, flexShrink: 0,
+                              }}>
+                                {u.name.charAt(0)}
+                              </span>
+                              <span className="flex-grow-1">{u.name}</span>
+                              {isMain && (
+                                <span className="badge" style={{ background: '#7C3AED', color: '#fff', fontSize: '0.65rem', fontWeight: 600 }}>Main</span>
+                              )}
+                              {selected && !isMain && <span style={{ fontSize: '0.875rem', color: '#7C3AED' }}>✓</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <Form.Text className="text-muted mt-2 d-block">처음 선택한 담당자가 Main 담당자로 지정됩니다.</Form.Text>
+                  </Form.Group>
+                </Col>
+              </Row>
             </div>
           </div>
         </>
@@ -502,45 +550,94 @@ export default function ProjectDetailPage() {
               {project.members.length === 0 ? (
                 <div className="text-muted small">배정된 멤버가 없습니다.</div>
               ) : (
-                <div className="d-flex flex-column gap-3">
-                  {(['main_support', 'support', 'customer'] as const).map((role) => {
-                    const roleMembers = project.members.filter((m) => m.role === role);
-                    if (roleMembers.length === 0) return null;
-                    const meta = ROLE_META[role];
-                    return (
-                      <div key={role}>
-                        <div
-                          className="mb-2"
-                          style={{
-                            fontSize: '0.75rem', fontWeight: 600,
-                            color: meta.color,
-                            textTransform: 'uppercase', letterSpacing: '0.05em',
-                          }}
-                        >
-                          {meta.label}
-                        </div>
-                        <div className="d-flex flex-wrap gap-2">
-                          {roleMembers.map((m) => (
-                            <span
-                              key={m.id}
-                              style={{
-                                padding: '0.3rem 0.75rem',
-                                fontSize: '0.8125rem',
-                                fontWeight: 500,
-                                borderRadius: '50rem',
-                                border: `1.5px solid ${meta.color}33`,
-                                background: `${meta.color}0D`,
-                                color: meta.color,
-                              }}
-                            >
-                              {m.user.name}
+                <Row>
+                  {/* 좌측: 고객담당자 */}
+                  <Col md={6} style={{ borderRight: '1px solid var(--border-subtle)' }} className="pe-md-4 mb-3 mb-md-0">
+                    {(() => {
+                      const customers = project.members.filter((m) => m.role === 'customer');
+                      return (
+                        <>
+                          <div className="d-flex align-items-center gap-2 mb-3">
+                            <span style={{ display: 'inline-block', width: 3, height: 14, borderRadius: 2, background: '#2F9E44' }} />
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2F9E44', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              고객담당자
                             </span>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                            {customers.length > 0 && (
+                              <span className="badge" style={{ background: 'rgba(47,158,68,0.1)', color: '#2F9E44', fontSize: '0.68rem' }}>{customers.length}명</span>
+                            )}
+                          </div>
+                          {customers.length === 0 ? (
+                            <div className="text-muted small">배정된 고객담당자가 없습니다.</div>
+                          ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                              {customers.map((m) => (
+                                <div key={m.id} className="d-flex align-items-center px-3 py-2 rounded-2" style={{ background: 'rgba(47,158,68,0.04)' }}>
+                                  <span style={{
+                                    width: 28, height: 28, borderRadius: '50%',
+                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                    background: 'rgba(47,158,68,0.15)', color: '#2F9E44',
+                                    fontSize: '0.75rem', fontWeight: 600, marginRight: 10, flexShrink: 0,
+                                  }}>
+                                    {m.user.name.charAt(0)}
+                                  </span>
+                                  <span style={{ fontSize: '0.8125rem', fontWeight: 500 }}>{m.user.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </Col>
+
+                  {/* 우측: 지원담당자 */}
+                  <Col md={6} className="ps-md-4">
+                    {(() => {
+                      const mains = project.members.filter((m) => m.role === 'main_support');
+                      const supports = project.members.filter((m) => m.role === 'support');
+                      const allSupports = [...mains, ...supports];
+                      return (
+                        <>
+                          <div className="d-flex align-items-center gap-2 mb-3">
+                            <span style={{ display: 'inline-block', width: 3, height: 14, borderRadius: 2, background: '#7C3AED' }} />
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              지원담당자
+                            </span>
+                            {allSupports.length > 0 && (
+                              <span className="badge" style={{ background: 'rgba(124,58,237,0.1)', color: '#7C3AED', fontSize: '0.68rem' }}>{allSupports.length}명</span>
+                            )}
+                          </div>
+                          {allSupports.length === 0 ? (
+                            <div className="text-muted small">배정된 지원담당자가 없습니다.</div>
+                          ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                              {allSupports.map((m) => {
+                                const isMain = m.role === 'main_support';
+                                return (
+                                  <div key={m.id} className="d-flex align-items-center px-3 py-2 rounded-2" style={{ background: isMain ? 'rgba(124,58,237,0.08)' : 'rgba(124,58,237,0.03)' }}>
+                                    <span style={{
+                                      width: 28, height: 28, borderRadius: '50%',
+                                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                      background: isMain ? '#7C3AED' : 'rgba(124,58,237,0.15)',
+                                      color: isMain ? '#fff' : '#7C3AED',
+                                      fontSize: '0.75rem', fontWeight: 600, marginRight: 10, flexShrink: 0,
+                                    }}>
+                                      {m.user.name.charAt(0)}
+                                    </span>
+                                    <span className="flex-grow-1" style={{ fontSize: '0.8125rem', fontWeight: 500 }}>{m.user.name}</span>
+                                    {isMain && (
+                                      <span className="badge" style={{ background: '#7C3AED', color: '#fff', fontSize: '0.65rem' }}>Main</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </Col>
+                </Row>
               )}
             </div>
           </div>

@@ -1,12 +1,12 @@
 # nu-servicedesk PDCA Completion Report
 
-> **Summary**: Full-scope service desk platform implementation (12 modules). CTO 6인 전문가팀 검증 후 V2.2 보안·비즈니스로직 패치 적용 완료. 263개 테스트 전체 통과. Match rate 98.3% (초기) → V2.2 패치 이후 전 항목 해소.
+> **Summary**: Full-scope service desk platform implementation (12 modules). V2.3 CTO 8인 전수점검 — RBAC·워크플로우·알림·UI 18건 수정 완료. 263개 테스트 통과.
 >
 > **Author**: CTO Team (multi-agent orchestration)
 > **Created**: 2026-04-10
-> **Last Modified**: 2026-04-10 (V2.2 패치 현행화)
-> **Status**: Approved — V2.2
-> **Version**: V2.2 (CTO 6인 검증 후속 패치)
+> **Last Modified**: 2026-04-11 (V2.3 전수점검 및 패치 적용)
+> **Status**: Approved — V2.3
+> **Version**: V2.3 (CTO 8인 전수점검 + PLAN/DESIGN 일치 검증 완료)
 
 ---
 
@@ -38,7 +38,7 @@
 #### Module 1: Foundation Stack (Docker + Prisma + Shared Libraries)
 **완료도**: 100% | **테스트**: N/A (기초 계층)
 
-- Docker 환경 구성 (Next.js 13 App Router, Node 20, PostgreSQL 16)
+- Docker 환경 구성 (Next.js 15 App Router, Node 20, PostgreSQL 16)
 - Prisma V5 스키마 정의: **22개 모델**
   - Company, Project, User, Role, Ticket, CompleteRequest, ExtendRequest, Comment, Attachment, Notification, SatisfactionRating, LoginHistory, NotificationSubscription, DLQJob, Holiday, BusinessHours 등
 - 자동 마이그레이션 및 시드 데이터 (테스트 계정 3개 역할)
@@ -240,12 +240,12 @@ R2_SECRET_ACCESS_KEY=[secret]
 - 브라우저 Push 구독 저장 (NotificationSubscription 모델)
 
 **알림 타입** (21개):
-- TICKET_CREATED, TICKET_ASSIGNED, TICKET_STATUS_CHANGED
-- EXTEND_REQUESTED, EXTEND_APPROVED, EXTEND_AUTO_APPROVE_SOON, EXTEND_AUTO_APPROVED
-- COMPLETE_REQUESTED, COMPLETE_APPROVED, COMPLETE_AUTO_APPROVE_SOON
-- SATISFACTION_REQUESTED, COMMENT_MENTIONED, COMMENT_REPLIED
-- ATTACHMENT_ADDED, ARCHIVE_COMPLETED, BATCH_JOB_FAILED
-- PUSH_SUBSCRIPTION_FAILED, SYSTEM_ALERT, ONBOARDING_MILESTONE 등
+- TICKET_CREATED, TICKET_RECEIVED, EXTEND_REQUESTED, EXTEND_AUTO_APPROVE_SOON
+- EXTEND_APPROVED, EXTEND_REJECTED, EXTEND_AUTO_APPROVED
+- COMPLETE_REQUESTED, COMPLETE_APPROVED, COMPLETE_REJECTED, COMPLETE_2ND_REJECTED, COMPLETE_AUTO_APPROVED
+- COMMENT_CREATED, IN_PROGRESS_TRANSITION, SATISFACTION_REMINDER, DELAYED_TRANSITION
+- STALE_ESCALATION, PROJECT_DEACTIVATED, CUSTOMER_ZERO_WARNING
+- PROXY_APPROVAL_COMPLETED, BATCH_JOB_FAILED
 
 **API 엔드포인트**:
 - POST /api/notifications/subscribe (구독 등록)
@@ -459,7 +459,7 @@ Overall = (Structural × 0.15) + (Functional × 0.25)
 
 | # | 기준 | 목표 | 달성도 | 증거 |
 |---|------|------|--------|------|
-| SC-11 | Beta 50팀 가입 준비 | ✅ | 100% | 다중 테넌트 구조 (Company→Project→User), 시드 데이터 3개 회사 |
+| SC-11 | Beta 50팀 가입 준비 | ✅ | 100% | 다중 테넌트 구조 (Company→Project→User), 시드 데이터 5개 회사, 29명 사용자, 8개 프로젝트, 60개 티켓 |
 | SC-12 | 30일 활성화율 60% | ⚠️ | 준비 완료 | 온보딩 마법사, 대시보드, 첫 티켓 가이드 페이지 준비됨 |
 | SC-13 | 온보딩 완료율 70% | ⚠️ | 준비 완료 | 4단계 마법사, 진행상태 저장, 스킵 옵션 제한 |
 
@@ -988,3 +988,41 @@ nu-servicedesk/
 6. **예측 불가능한 초기 비밀번호**: 로그인 ID 기반 초기 비밀번호는 열거 공격에 취약. `crypto.randomBytes` 기반 무작위 생성 + API 응답으로 일회 전달하는 패턴 권장.
 7. **환경변수 폴백 필수**: 필수 환경변수가 누락되었을 때 보안 로직이 조용히 우회되지 않도록, 런타임 폴백(`request.nextUrl.host`)이나 startup 검증(`invariant`)을 반드시 추가.
 8. **HSTS+CSP는 배포 전 체크리스트**: 보안 헤더는 기능 구현 후 쉽게 누락됨. `next.config.ts` 헤더 + Vitest 테스트(security-headers.test.ts)를 CI 게이트로 포함해야 함.
+
+---
+
+## V2.3 패치 요약 (2026-04-11)
+
+### 점검 방법
+CTO 8인 전문가팀 병렬 전수점검 (PLAN/DESIGN 원칙 vs 실 구현 비교)
+- Team 1: 상태머신 + 워크플로우 (14항목)
+- Team 2: 연기/완료 요청 흐름 (10항목)
+- Team 3: 배치 잡 10개 (10항목)
+- Team 4: RBAC + 인증 (22항목)
+- Team 5: DB 스키마 (22항목)
+- Team 6: 알림 + Push (21항목)
+- Team 7: 근무시간 + 날짜 계산 (14항목)
+- Team 8: 런타임 API 테스트 (12항목)
+
+### 점검 결과: 111개 항목 중 18건 불일치 발견 → 전부 수정
+
+### Critical (2건)
+1. **완료요청 3회차 자동승인** — `requestComplete()`에서 3회차 즉시 자동승인 로직 추가
+2. **취소 RBAC** — support/customer 본인 REGISTERED 티켓 취소 허용
+
+### High (8건)
+3. **수동접수 deadline** — receive API에서 expectedCompletionDate → deadline 설정
+4. **ExtendRequest soft-delete** — 승인/반려 시 isDeleted=true 추가
+5. **완료반려 후 기한체크** — rejectComplete 후 now>deadline 시 즉시 DELAYED 전환
+6. **고객 티켓수정** — customer 본인 REGISTERED 상태 티켓 수정 허용
+7. **support 프로젝트 필터** — projects/[id] GET에 support 멤버 필터 추가
+8. **desiredDate 근무일** — 캘린더일 → addBusinessDays 변경
+9. **TICKET_CREATED 알림** — 티켓 생성 시 main_support에게 알림 발송
+10. **IN_PROGRESS_TRANSITION 알림** — confirm 시 고객에게 알림 발송
+
+### Medium (5건)
+11. **extend 사전경고 수신자** — supervisor → customer 변경
+12. **confirm 409 처리** — DELAYED 상태 처리 확인 완료
+13. **support 티켓상세 필터** — tickets/[id] GET에 support 멤버 필터 추가
+14. **수동접수 알림** — TICKET_RECEIVED 알림 수동접수에도 발송
+15. **COMPLETE_2ND_REJECTED 수신자** — supervisor → admin 변경

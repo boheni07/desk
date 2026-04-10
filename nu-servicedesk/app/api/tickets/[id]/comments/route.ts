@@ -81,7 +81,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           select: { id: true, fileName: true, fileSize: true, mimeType: true },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'asc' },
     });
 
     // Map soft-deleted comments to masked content
