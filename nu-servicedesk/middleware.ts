@@ -96,15 +96,26 @@ export async function middleware(request: NextRequest) {
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) && pathname.startsWith('/api/')) {
     const origin = request.headers.get('origin');
     const referer = request.headers.get('referer');
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL
-      ?? `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+    const rawAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, '');
     if (!origin && !referer) {
       return NextResponse.json(
         { success: false, error: { code: 'CSRF_REJECTED', message: '요청 출처가 유효하지 않습니다.', status: 403 } },
         { status: 403 },
       );
     }
-    if (origin && origin !== appUrl) {
+    // Compare hosts only (ignore protocol) to handle HTTPS proxies/tunnels
+    const reqHost = request.headers.get('host') ?? request.nextUrl.host;
+    const configHost = rawAppUrl ? (() => { try { return new URL(rawAppUrl).host; } catch { return null; } })() : null;
+    let csrfRejected = false;
+    if (origin) {
+      try {
+        const originHost = new URL(origin).host;
+        csrfRejected = originHost !== reqHost && originHost !== configHost;
+      } catch {
+        csrfRejected = true;
+      }
+    }
+    if (csrfRejected) {
       return NextResponse.json(
         { success: false, error: { code: 'CSRF_REJECTED', message: '요청 출처가 유효하지 않습니다.', status: 403 } },
         { status: 403 },
